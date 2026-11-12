@@ -14,12 +14,11 @@
   .scene>*{position:relative;z-index:1}
   .scene-inner{max-width:720px;margin:0 auto}
   @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-  .text{font-size:1.15rem;line-height:1.65;margin-bottom:1rem;min-height:3em;text-shadow:0 2px 6px rgba(0,0,0,.9)}
-  .after-text{font-size:1.1rem;line-height:1.7;color:#ccc;font-style:italic}
-  .status{font-size:.85rem;color:#888;margin-bottom:1.5rem;letter-spacing:.05em}
-  .status span{margin-right:1rem}
+  .text{font-size:1.15rem;line-height:1.7;margin-bottom:1rem;min-height:3em;text-shadow:0 2px 6px rgba(0,0,0,.9);white-space:pre-line}
+  .after-text{font-size:1.05rem;line-height:1.75;color:#c8c8c8;font-style:italic;white-space:pre-line}
+  .status{font-size:.85rem;color:#888;margin-bottom:1.5rem;letter-spacing:.05em;display:flex;flex-wrap:wrap;gap:.6rem}
   .status .low{color:#c33}
-  .choices button{display:block;width:100%;margin:.5rem 0;padding:.8rem 1rem;background:rgba(20,20,20,.85);color:#eee;border:1px solid #333;cursor:pointer;font-family:inherit;font-size:1rem;text-align:left;transition:background .2s,transform .1s,border-color .2s}
+  .choices button{display:block;width:100%;margin:.5rem 0;padding:.85rem 1.1rem;background:rgba(20,20,20,.85);color:#eee;border:1px solid #333;cursor:pointer;font-family:inherit;font-size:1rem;text-align:left;transition:background .2s,transform .1s,border-color .2s}
   .choices button:hover{background:rgba(40,40,40,.95);transform:translateX(4px);border-color:#555}
   .name-input{width:100%;padding:.8rem 1rem;background:rgba(20,20,20,.85);color:#eee;border:1px solid #333;font-family:inherit;font-size:1.1rem;margin-bottom:1rem}
   .name-input:focus{outline:none;border-color:#666}
@@ -49,29 +48,30 @@ const BG = {
   psych:"linear-gradient(135deg,#1a0a1a,#0a050a)",
   park:"linear-gradient(135deg,#0a1a10,#050a08)",
   orphanage:"linear-gradient(135deg,#12100a,#080605)",
+  neighbor:"linear-gradient(135deg,#1a1410,#0a0806)",
 };
 
 /* ============ СОСТОЯНИЕ ============ */
 const state = {
   name:"", gender:"boy",
-  y:2015, m:11, d:28, age:6, day:0,
+  y:2015, m:9, d:1, age:6, day:0,    // 1 сентября 2015, 6 лет
   fear:0, guilt:0, stamina:10, karma:0, mental:10,
   flags:{}, relations:{}, timers:[],
   deathCause:null, deathAge:null, killer:null,
   seenEndings:new Set(),
-  thingLevel:0, thingNextMonth:3,
+  thingLevel:0, thingNextDay:180,
   recentScenes:[],
   dementia:0,
 };
 
 /* ============ ХЕЛПЕРЫ ============ */
 const MONTHS = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
-const fmtDate = () => `${MONTHS[state.m-1]} ${state.y}`;
+const fmtDate = () => `${state.d} ${MONTHS[state.m-1]} ${state.y}`;
 const flag = n => !!state.flags[n];
 const rel  = n => state.relations[n] ?? 0;
 const setRel = (n,d) => { state.relations[n] = Math.max(-10,Math.min(10,rel(n)+d)); };
 const setMental = d => { state.mental = Math.max(1,Math.min(10,state.mental+d)); };
-const schedule = (months,event) => state.timers.push({day:state.day+months,event});
+const schedule = (days,event) => state.timers.push({day:state.day+days,event});
 const checkTimers = () => {
   const due = state.timers.filter(t=>t.day<=state.day);
   state.timers = state.timers.filter(t=>t.day>state.day);
@@ -79,7 +79,6 @@ const checkTimers = () => {
 };
 const starStr = n => "★".repeat(n)+"☆".repeat(10-n);
 const g  = (m,f) => state.gender === "girl" ? f : m;
-const he = () => state.gender === "girl" ? "она" : "он";
 const lowMentalActive = () => state.mental <= 2;
 const glance = () => lowMentalActive() ? "Люди отводят взгляды. " : "";
 const pickScene = pool => {
@@ -90,6 +89,20 @@ const pickScene = pool => {
   if(state.recentScenes.length > 6) state.recentScenes.shift();
   return pick;
 };
+
+function advanceDays(n){
+  for(let i=0; i<n; i++){
+    state.d += 1;
+    const dim = new Date(state.y, state.m, 0).getDate();
+    if(state.d > dim){ state.d = 1; state.m += 1; }
+    if(state.m > 12){ state.m = 1; state.y += 1; }
+    state.day += 1;
+    if(state.m === 11 && state.d === 28){
+      state.age += 1;
+      state.flags._birthday_today = true;
+    }
+  }
+}
 
 /* ============ ЛЕНА ============ */
 function lenaProtect(){
@@ -138,7 +151,7 @@ function playSfx(name){
   }catch(e){}
 }
 
-/* ============ 120+ ПРИЧИН СМЕРТИ ============ */
+/* ============ ПРИЧИНЫ СМЕРТИ ============ */
 const DEATHS = {
   car:"сбит машиной", train:"сбит поездом", fall:"упал с высоты",
   drown:"утонул", fire:"сгорел", electric:"удар током", gas:"отравился газом",
@@ -195,187 +208,366 @@ const DEATHS = {
   psych_kill:"убит в психушке", suicide_watch:"умер под наблюдением",
 };
 
+/* ============ ВОПРОСЫ УЧИТЕЛЯ ============ */
+const QUESTIONS = [
+  {q:"Сколько будет 7 умножить на 8?", correct:"56", wrong:["54","48","64"], subject:"математике"},
+  {q:"Сколько букв в слове «молоко»?", correct:"6", wrong:["5","7","4"], subject:"русскому"},
+  {q:"Столица Франции?", correct:"Париж", wrong:["Лондон","Берлин","Мадрид"], subject:"географии"},
+  {q:"В каком году началась Великая Отечественная война?", correct:"1941", wrong:["1939","1945","1914"], subject:"истории"},
+  {q:"Кто написал «Войну и мир»?", correct:"Толстой", wrong:["Достоевский","Пушкин","Чехов"], subject:"литературе"},
+  {q:"Сколько будет 15 плюс 27?", correct:"42", wrong:["41","43","52"], subject:"математике"},
+  {q:"Самая длинная река в мире?", correct:"Амазонка", wrong:["Нил","Волга","Енисей"], subject:"географии"},
+  {q:"Периметр квадрата со стороной 5?", correct:"20", wrong:["25","10","15"], subject:"математике"},
+  {q:"Сколько цветов в радуге?", correct:"7", wrong:["6","8","5"], subject:"окружающему миру"},
+  {q:"Кто первым полетел в космос?", correct:"Гагарин", wrong:["Титов","Армстронг","Терешкова"], subject:"истории"},
+  {q:"Сколько будет 9 умножить на 6?", correct:"54", wrong:["56","63","45"], subject:"математике"},
+  {q:"Сколько звуков в слове «ёж»?", correct:"3", wrong:["2","4","1"], subject:"русскому"},
+  {q:"Какого цвета хлорофилл?", correct:"Зелёный", wrong:["Красный","Синий","Жёлтый"], subject:"биологии"},
+  {q:"Что такое H₂O?", correct:"Вода", wrong:["Кислород","Водород","Соль"], subject:"химии"},
+];
+
+function buildTeacherScene(){
+  const q = QUESTIONS[Math.floor(Math.random()*QUESTIONS.length)];
+  const answers = [q.correct, ...q.wrong].sort(()=>Math.random()-0.5);
+  return {
+    bg:"school",
+    text:`Марина Павловна стучит указкой по доске. В классе двадцать три человека. Все смотрят в журнал.\n\n«${state.name}», — говорит она, не поднимая глаз. «К доске».\n\nКласс затихает. Кто-то хихикает. У тебя потеют ладони. Вопрос по ${q.subject}: ${q.q}`,
+    choices: answers.map(a => ({
+      text: a,
+      effects: ()=>{
+        if(a === q.correct){
+          setMental(+1);
+          setRel("teacher", +1);
+        } else {
+          setMental(-2);
+          state.guilt += 1;
+        }
+      },
+      next: a === q.correct ? "teacher_correct" : "teacher_wrong",
+    }))
+  };
+}
+
 /* ============ СЦЕНЫ ============ */
 let scenes = {};
 
 function initScenes(){
 return {
 
-/* ========== 6–10 ========== */
-home_age6: { bg:"home", text:`${fmtDate()}. Тебе шесть. Мать на кухне. Отец не вернулся с работы — третий вечер подряд. Из подвала — шорох.`,
+/* ========== ОТКРЫТИЕ: ПЕРВЫЙ ДЕНЬ В ШКОЛЕ ========== */
+first_day_school: { bg:"school", text:`1 сентября 2015. Тебе шесть лет и два месяца.\n\nМать держит тебя за руку крепче, чем нужно. Её ладонь влажная. У ворот школы — толпа детей. Кто-то плачет, кто-то смеётся. Учительница в очках держит табличку «1-Б».\n\nМать приседает перед тобой. Поправляет воротник, хотя он в порядке. «${state.name}, — говорит она тихо, — если что — беги домой. Понял?»`,
+  choices:[
+    {text:"«Понял»", next:"first_day_inside",
+     after:`Она целует тебя в макушку. От неё пахнет утренним кофе и чем-то ещё — тревогой.\n\nОна уходит. Ты стоишь у ворот один. Сердце стучит где-то в горле. Кто-то толкает тебя в спину, и ты делаешь шаг вперёд.`},
+    {text:"«Я не боюсь»", effects:()=>{setMental(+1);}, next:"first_day_inside",
+     after:`Она улыбается — впервые за долгое время. В этой улыбке усталость и что-то похожее на гордость.\n\n«Молодец. Иди». Ты идёшь. Не оглядываешься.`},
+    {text:"Заплакать", effects:()=>{setMental(-1);}, next:"first_day_inside",
+     after:`Она вытирает тебе слёзы большим пальцем. «Всё будет хорошо. Иди». Голос дрожит.\n\nТы идёшь, оглядываясь. Она стоит и смотрит, пока ты не исчезаешь в дверях.`},
+  ]},
+
+first_day_inside: { bg:"corridor", text:`Коридор пахнет краской и чужими куртками. Ты не знаешь, куда идти. Где-то вдалеке гудит толпа первоклассников.\n\nУ окна — скамейка. На ней сидит девочка с двумя косичками и большим рюкзаком. Она грызёт сушку. Рядом с ней на скамейке — рассыпаны крошки. Она поднимает голову и смотрит на тебя.`,
+  choices:[
+    {text:"Подойти и сесть рядом", next:"lena_first_meeting",
+     after:`Ты подходишь. Садишься на другой конец скамейки. Она молчит секунду, отламывает половину сушки и протягивает тебе, не глядя.\n\n«Держи. Ты новенький, да?»`},
+    {text:"Пройти мимо", effects:()=>{setMental(-1);}, next:"first_day_alone",
+     after:`Ты идёшь дальше. Чувствуешь её взгляд в спину. У поворота оборачиваешься — она всё ещё смотрит.`},
+    {text:"Спросить, где класс", next:"lena_first_meeting",
+     after:`Ты подходишь ближе. «Слушай, ты не знаешь, где 1-Б?»\n\nОна улыбается. У неё не хватает одного зуба — верхнего, слева. «Я Лена. Я тоже в 1-Б. Садись».`},
+  ]},
+
+lena_first_meeting: { bg:"corridor", text:`Она смотрит на тебя внимательно, как будто оценивает.\n\n«Я Лена. А тебя как зовут?»`,
+  choices:[
+    {text:`«${state.name}»`, effects:()=>{setRel("lena",+3);state.flags.lena_friend=true;state.flags.lena_met=true;}, next:"lena_first_friends",
+     after:`«${state.name}».\n\n— «Красивое имя. У меня была кошка с таким именем. Только она убежала». Ты смеёшься. Она тоже. Первый раз за утро тебе не страшно.`},
+    {text:"«Неважно»", effects:()=>{setRel("lena",-1);}, next:"first_day_alone",
+     after:`Она пожимает плечами. «Ладно». Отворачивается, откусывает сушку, больше не смотрит.`},
+  ]},
+
+lena_first_friends: { bg:"corridor", text:`Прозвенел звонок — резкий, дребезжащий. Лена вскакивает, отряхивает крошки с колен.\n\n«Пошли, а то опоздаем. Марина Павловна злая, когда опаздывают. Она указкой стучит по столу — бам-бам-бам — и все вздрагивают».\n\nОна хватает тебя за руку и тащит по коридору.`,
+  next:"first_day_class"},
+
+first_day_class: { bg:"school", text:`Класс. Одиннадцать детей. Белые стены, доска с мелом, запах мокрой тряпки.\n\nУчительница — высокая, в очках, с указкой. Она оглядывает тебя поверх очков.\n\n«Новенький? Садись с Леной. Она у нас... разговорчивая». Класс смеётся. Лена показывает язык — кому-то конкретному, в третьем ряду.`,
+  choices:[
+    {text:"Улыбнуться Лене", effects:()=>{setRel("lena",+1);}, next:"first_day_after",
+     after:`Ты садишься рядом. Парта пахнет стружкой — кто-то только что что-то вырезал.\n\nЛена шепчет: «Не бойся её. Она только кричит. У неё дома кот умер, вот она и злая». Первый урок начинается.`},
+    {text:"Сесть тихо", effects:()=>{}, next:"first_day_after",
+     after:`Ты садишься рядом. Молча. Смотришь в окно. За окном — тополь, роняет листья.\n\nЛена что-то рисует в тетради. Через минуту пододвигает к тебе — это смешная рожица с усами, похожая на Марину Павловну. Ты прыскаешь.`},
+  ]},
+
+first_day_after: { bg:"school", text:`Последний урок закончился. Дети вываливаются из класса с криками.\n\nЛена ждёт тебя у скамейки, где вы познакомились. Рюкзак у её ног, косички растрёпаны.\n\n«Ну что, — говорит она, — ты как? Первый день — самый страшный. Дальше легче».`,
+  choices:[
+    {text:"«Спасибо, что помогла»", effects:()=>{setRel("lena",+2);}, next:"next_day", after:`Она машет рукой. «Да ладно. Мне скучно было, а тут ты».\n\nВы расходитесь в разные стороны. Дома мать спросит, как всё прошло. Ты скажешь: «Нормально». И впервые за долгое время это будет правда.`},
+    {text:"«Как тебя зовут?»", next:"next_day", after:`Она закатывает глаза. «Лена. Я тебе уже говорила. Ты забыл?»\n\nТы краснеешь. Она смеётся, легко, необидно. «Ладно. Я тоже забываю. У меня память как у рыбки».`},
+    {text:"«А ты всегда тут сидишь?»", next:"next_day", after:`Она кивает. «Каждый день. С первого класса. Тут хорошее место — видно всех, а тебя не видно».\n\nТы задумываешься над этим. Дома весь вечер ты думаешь об этом.`},
+  ]},
+
+first_day_alone: { bg:"school", text:`Ты идёшь по коридору один. Урок уже начался — ты слышишь, как из-за дверей гудит голос Марины Павловны.\n\nТы не знаешь, куда идти. Присаживаешься на подоконник. Так проходит час. Потом ещё один. Тебя находят.`,
+  next:"next_day"},
+
+/* ========== ДОМ, ПОДВАЛ (6–10) ========== */
+home_age6: { bg:"home", text:`${fmtDate()}.\n\nТебе шесть. Мать на кухне — слышно, как гремит посудой. Отец не вернулся с работы — третий вечер подряд. Ты не спрашиваешь, где он. Привык.\n\nИз подвала доносится шорох. Будто кто-то перебирает старые вещи. Но в подвале нет вещей — только пустые полки и мокрое пятно на полу, которое никогда не высыхает.`,
   choices:[
     {text:"Пойти в подвал", effects:()=>{state.fear+=2;state.flags.basement_seen=true;}, next:"basement_age6",
-     after:`Скрип ступеней. Света нет. Шорох прекращается — теперь тишина стала громче.`},
+     after:`Скрип ступеней — вторая сверху всегда скрипит громче. Света нет. Шорох прекращается, как только ты делаешь шаг.\n\nТеперь тишина стала громче.`},
     {text:"Спрятаться под одеяло", effects:()=>{state.fear+=1;setRel("mother",+1);}, next:"home_night_age6",
-     after:`Забираешься под одеяло. Шорох не прекращается. Ты засыпаешь под него.`},
+     after:`Забираешься под одеяло с головой. Шорох не прекращается. Он будто подстраивается под дыхание.\n\nТы засыпаешь под него.`},
     {text:"Позвать мать", effects:()=>{setRel("mother",+2);}, next:"mother_kitchen_age6",
-     after:`Мать оборачивается — руки в муке, глаза уставшие. «Что, милый?»`},
-    {text:"Поджечь дом", effects:()=>{state.karma-=5;state.flags.pyro=true;}, next:"burn_house_age6",
-     after:`Ты находишь спички. Руки дрожат. Одна ломается. Вторая зажигается.`},
+     after:`Ты идёшь на кухню. Мать оборачивается — руки в муке, глаза уставшие, улыбка натянутая.\n\n«Что, милый?»`},
   ]},
-burn_house_age6: { bg:"home", text:`Дом горит. Мать кричит из кухни. Ты стоишь на улице.`,
+
+basement_age6: { bg:"basement", text:`Темно. Пахнет сыростью и чем-то ещё — сладковатым, как испорченное варенье.\n\nЧто-то шевелится в углу. Ты не можешь разглядеть.`,
   choices:[
-    {text:"Вернуться за ней", effects:()=>{if(state.stamina>5){state.flags.saved_mother=true;setRel("mother",+5);}else die("fire",6);}, next:"next_day",
-     after:`Ты вбегаешь. Огонь. Дым. Ты хватаешь её за руку.`},
-    {text:"Смотреть", effects:()=>{setRel("mother",-10);state.karma-=10;state.flags.killed_someone=true;}, next:"next_day",
-     after:`Ты смотришь. Огонь. Крики. Потом тишина. Соседи вызывают полицию.`},
-    {text:"Бежать", effects:()=>{state.flags.orphan=true;state.karma-=5;}, next:"next_day",
-     after:`Ты бежишь. Дом горит за спиной. Ты больше не оглядываешься.`},
+    {text:"Подойти ближе", effects:()=>{state.fear+=4;}, next:"basement_thing_age6", after:`Ты делаешь шаг. Потом ещё. Пол холодный даже через носки.`},
+    {text:"Бежать наверх", effects:()=>{state.fear+=1;}, next:"home_night_age6"},
+    {text:"Замереть", effects:()=>{state.fear+=2;}, next:"basement_wait"},
   ]},
-basement_age6: { bg:"basement", text:`Темно. Что-то шевелится. Ты не можешь разглядеть.`,
+
+basement_wait: { bg:"basement", text:`Ты стоишь. Не дышишь. Шорох стихает.\n\nИ тогда ты слышишь голос — тихий, детский. Свой собственный, но будто из другой комнаты.\n\n«Не уходи. Мне скучно».`,
   choices:[
-    {text:"Подойти", effects:()=>{state.fear+=4;state.flags.saw_it=true;}, next:"basement_thing_age6", after:`Ты делаешь шаг. Потом ещё.`},
-    {text:"Бежать", effects:()=>{state.fear+=1;}, next:"home_night_age6"},
-    {text:"Запереть дверь", effects:()=>{state.flags.locked_basement=true;}, next:"next_day"},
+    {text:"«Кто ты?»", effects:()=>{state.fear+=3;}, next:"basement_answer_age6"},
+    {text:"Убежать", effects:()=>{setMental(-1);}, next:"home_night_age6"},
   ]},
-basement_thing_age6: { bg:"basement", text:`Оно смотрит. Нет лица, но ты знаешь — оно улыбается.`,
+
+basement_thing_age6: { bg:"basement", text:`Оно смотрит. У него нет лица — но ты знаешь: оно улыбается.\n\nКак ты это знаешь? Ты не можешь объяснить.`,
   choices:[
-    {text:"Спросить «кто ты?»", effects:()=>{state.fear+=5;state.flags.asked_it=true;}, next:"basement_answer_age6", after:`Ты шепчешь. Оно отвечает.`},
-    {text:"Ударить его", effects:()=>{state.karma-=3;state.fear+=3;die("thing_take",6);}},
-    {text:"Обнять его", effects:()=>{state.flags.hugged_it=true;setMental(-3);}, next:"next_day", after:`Ты обнимаешь. Оно холодное. Как лёд.`},
+    {text:"Спросить «кто ты?»", effects:()=>{state.fear+=5;}, next:"basement_answer_age6", after:`Ты шепчешь. Оно отвечает.`},
+    {text:"Ударить", effects:()=>{state.karma-=3;die("thing_take",6);}},
+    {text:"Обнять", effects:()=>{state.flags.hugged_it=true;setMental(-3);}, next:"next_day",
+     after:`Ты обнимаешь. Оно холодное. Как лёд. Ты не понимаешь, зачем это делаешь.`},
   ]},
-basement_answer_age6: { bg:"basement", text:`«Я — то, что останется, когда все уйдут». Ты запоминаешь.`, next:"home_night_age6"},
-mother_kitchen_age6: { bg:"home", text:`Мать обнимает. «Всё хорошо». Она врёт. Ты чувствуешь.`,
+
+basement_answer_age6: { bg:"basement", text:`«Я — то, что останется, когда все уйдут».\n\nГолос тихий. Спокойный. Как будто говорит о погоде.`,
+  next:"home_night_age6"},
+
+mother_kitchen_age6: { bg:"home", text:`Мать обнимает. От неё пахнет мукой и потом.\n\n«Всё хорошо, милый». Она врёт. Ты чувствуешь это. Но не говоришь.`,
   choices:[
     {text:"Поверить", effects:()=>{setRel("mother",+2);}, next:"home_night_age6"},
-    {text:"Спросить про подвал", effects:()=>{state.fear+=2;setRel("mother",-1);}, next:"mother_lies_age6", after:`Ты спрашиваешь. Она отворачивается.`},
-    {text:"Ударить её", effects:()=>{state.karma-=8;setRel("mother",-5);state.flags.killed_someone=true;}, next:"next_day"},
+    {text:"Спросить про подвал", effects:()=>{state.fear+=2;setRel("mother",-1);}, next:"mother_lies_age6",
+     after:`Ты спрашиваешь. Она отворачивается к раковине.`},
   ]},
-mother_lies_age6: { bg:"home", text:`«Там ничего нет». Её руки дрожат.`, next:"home_night_age6"},
-home_night_age6: { bg:"home", text:`Ночь. Ты не спишь. Шаги на лестнице.`,
+
+mother_lies_age6: { bg:"home", text:`«Там ничего нет». Её руки дрожат над раковиной. Она моет одну и ту же тарелку третий раз.`,
+  next:"home_night_age6"},
+
+home_night_age6: { bg:"home", text:`Ночь. Ты не спишь. Слышишь шаги на лестнице — медленные, тяжёлые.`,
   choices:[
-    {text:"Выйти", effects:()=>{state.fear+=3;}, next:"stairs_age6", after:`Ты выходишь в коридор.`},
+    {text:"Выйти в коридор", effects:()=>{state.fear+=3;}, next:"stairs_age6"},
     {text:"Закрыть глаза", effects:()=>{state.fear+=1;}, next:"next_day"},
   ]},
-stairs_age6: { bg:"home", text:`На лестнице никого. Но на верхней ступеньке — мокрый след.`, next:"next_day"},
-park_age7: { bg:"park", text:`${fmtDate()}. Ты ${g("пошёл","пошла")} в парк. На качелях сидит девочка. Качается медленно, глядя в землю.`,
-  when:()=>!flag("lena_met")&&!flag("lena_left")&&!flag("lena_dead"),
+
+stairs_age6: { bg:"home", text:`На лестнице никого. Но на верхней ступеньке — мокрый след. Босой. Маленький. Как у ребёнка.`,
+  next:"next_day"},
+
+/* ========== СУЩНОСТЬ (реже, 6–12 месяцев) ========== */
+thing_event_1: { bg:"home", text:`Прошло несколько месяцев. ${fmtDate()}.\n\nНочью просыпаешься от холода. Одеяло сброшено на пол. В углу комнаты — тень. Слишком густая. Не как от шкафа.`,
   choices:[
-    {text:"Подойти", effects:()=>{setRel("lena",+3);state.flags.lena_met=true;}, next:"lena_meet",
-     after:`Ты подходишь. Она поднимает глаза. В них что-то такое, чего ты не видел у других.`},
-    {text:"Играть одному", effects:()=>{setRel("lena",-1);}, next:"next_day"},
-    {text:"Толкнуть качели", effects:()=>{setRel("lena",-5);state.karma-=3;}, next:"next_day",
-     after:`Она падает. Не плачет. Смотрит долго. Потом встаёт и уходит.`},
-  ]},
-lena_meet: { bg:"park", text:`«Я Лена. Ты ${g("новенький","новенькая")}? Я тебя раньше не видела».`,
-  choices:[
-    {text:`«${state.name}»`, effects:()=>{setRel("lena",+2);state.flags.lena_friend=true;}, next:"next_day",
-     after:`«Я ${state.name}». Она улыбается. Вы качаетесь до темноты. Ты идёшь домой — и впервые не страшно.`},
-    {text:"Молча уйти", effects:()=>{setRel("lena",-2);}, next:"next_day"},
-    {text:"Соврать про имя", effects:()=>{state.karma-=1;state.flags.liar=true;}, next:"next_day"},
-  ]},
-steal_age10: { bg:"street", text:`Магазин. Шоколадка на полке. Продавец отвернулся.`,
-  choices:[
-    {text:"Украсть", effects:()=>{state.karma-=3;state.flags.thief=true;}, next:"next_day"},
-    {text:"Купить", effects:()=>{state.karma+=1;}, next:"next_day"},
-    {text:"Съесть на месте", effects:()=>{state.karma-=5;if(Math.random()<.5)die("choke",10);}, next:"next_day"},
-  ]},
-absurd_chalk_age10: { bg:"school", text:`На доске лежит кусок мела. Он выглядит съедобным.`,
-  choices:[
-    {text:"Съесть", effects:()=>{state.karma-=1;if(Math.random()<.1)die("poisoned",10);}, next:"next_day"},
-    {text:"Нарисовать неприличное", effects:()=>{state.karma-=2;}, next:"next_day"},
-    {text:"Кинуть в учителя", effects:()=>{state.karma-=3;}, next:"next_day"},
-  ]},
-absurd_aliens_age11: { bg:"street", text:`Ночью — свет в небе. Мигает. Кажется, это сигнал.`,
-  choices:[
-    {text:"Помахать", effects:()=>{}, next:"next_day"},
-    {text:"Крикнуть «заберите меня»", effects:()=>{if(Math.random()<.3)die("summoned",11);}, next:"next_day"},
-    {text:"Спрятаться", effects:()=>{}, next:"next_day"},
+    {text:"Смотреть", effects:()=>{state.fear+=3;}, next:"next_day",
+     after:`Тень не двигается. Но ты чувствуешь: она смотрит в ответ.\n\nУтром на полу — мокрый след, ведущий к двери подвала.`},
+    {text:"Закрыть глаза", effects:()=>{setMental(-1);}, next:"next_day"},
+    {text:"Позвать мать", effects:()=>{setRel("mother",+1);}, next:"thing_warn_1"},
   ]},
 
-/* ========== нейтральные ========== */
-neutral_dinner: { bg:"home", text:`Мать спрашивает, что приготовить на ужин.`,
+thing_warn_1: { bg:"home", text:`Мать приходит, включает свет. Она в халате, волосы растрёпаны.\n\nСадится на край кровати. «Что ты видел?»`,
   choices:[
-    {text:"«Макароны»", effects:()=>{setRel("mother",+1);}, next:"next_day"},
-    {text:"«Что угодно»", effects:()=>{}, next:"next_day"},
-    {text:"«Ничего»", effects:()=>{setRel("mother",-1);}, next:"next_day"},
+    {text:"Рассказать правду", effects:()=>{setRel("mother",+1);}, next:"next_day",
+     after:`Ты рассказываешь — про тень, про холод, про след.\n\nОна молчит. Долго. Потом говорит: «Не говори отцу. Он не поймёт». И уходит, закрыв за собой дверь неплотно.`},
+    {text:"Соврать", effects:()=>{setRel("mother",-1);}, next:"next_day"},
   ]},
-neutral_weather: { bg:"street", text:`Дождь. Идти в школу или прогулять?`,
-  choices:[
-    {text:"Пойти", effects:()=>{}, next:"next_day"},
-    {text:"Прогулять", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Позвать Лену прогулять", effects:()=>{if(flag("lena_left")||flag("lena_dead"))return;setRel("lena",+1);const r=lenaUse();if(r)return playScene(r);}, next:"next_day"},
-  ]},
-neutral_period: { bg:"home", text:`Ты замечаешь, что выросла. Мать говорит, это нормально.`, when:()=>state.gender==="girl", next:"next_day"},
-neutral_voice: { bg:"home", text:`Голос ломается. То басом, то пискляво.`, when:()=>state.gender==="boy", next:"next_day"},
 
-/* ========== 11–14 ========== */
-school_age12: { bg:"school", text:`${fmtDate()}. Новый класс. Аня сидит одна у окна. Учительница смотрит выжидающе.`,
+thing_event_2: { bg:"home", text:`Ещё через полгода. ${fmtDate()}.\n\nТы находишь в подвале старую фотографию — в углу за полкой, затянутую паутиной. На ней — семья. Не твоя. У всех стёрты лица, будто кто-то долго тёр их пальцем.`,
+  choices:[
+    {text:"Взять себе", effects:()=>{state.fear+=2;}, next:"next_day",
+     after:`Прячешь под матрас. Ночью фото оказывается на подушке — лицом вверх.\n\nТы не брал его.`},
+    {text:"Показать матери", next:"thing_warn_2",
+     after:`Мать берёт фото. Долго смотрит — слишком долго. Потом бросает в огонь на плите.\n\n«Не трогай больше ничего в подвале». Голос не дрожит. Но руки — да.`},
+    {text:"Сжечь самому", effects:()=>{state.fear-=1;}, next:"next_day"},
+  ]},
+
+thing_warn_2: { bg:"home", text:`Мать стоит у окна. За стеклом — сумерки, фонарь, кто-то идёт по улице.\n\n«Ты давно видишь… его?» — спрашивает она, не оборачиваясь.`,
+  choices:[
+    {text:"«Да. С шести лет»", effects:()=>{state.flags.mother_believes=true;}, next:"next_day",
+     after:`Она оборачивается. В её глазах страх — не за себя.\n\nЗа тебя. «Я знала. Я надеялась, оно выберет меня».`},
+    {text:"«Нет. Просто фото»", next:"next_day",
+     after:`Она выдыхает. Ты видишь, как напряжение уходит из её плеч.\n\nТы только что остался один.`},
+  ]},
+
+thing_event_3: { bg:"basement", text:`Проходит почти год. ${fmtDate()}.\n\nТы спускаешься в подвал за банкой варенья. На стене — новая надпись. Свежая краска, капает на пол.\n\n«ОН РАСТЁТ».`,
+  choices:[
+    {text:"Сфотографировать", next:"next_day",
+     after:`Ты щёлкаешь телефоном. На снимке — пустая стена. Надпись видна только глазами.`},
+    {text:"Показать отцу", effects:()=>{setRel("father",-1);}, next:"thing_warn_father",
+     after:`Отец спускается. Смотрит на стену. Долго. Потом трогает краску пальцем, нюхает.\n\n«Какая надпись? Тут ничего нет». Уходит. Ты стоишь перед пустой стеной.`},
+    {text:"Стереть", effects:()=>{state.fear+=2;}, next:"next_day",
+     after:`Ты трёшь её рукавом. Краска не стирается.\n\nУтром надпись другая: «ТЫ ТОЖЕ».`},
+  ]},
+
+thing_warn_father: { bg:"home", text:`Отец сидит на кухне. Перед ним — стакан, наполовину пустой. Смотрит на тебя.\n\n«Мать говорит, ты видишь вещи».`,
+  choices:[
+    {text:"Рассказать всё", effects:()=>{if(flag("mother_believes"))state.flags.father_believes=true;}, next:"next_day",
+     after:`Ты рассказываешь — про подвал, про тень, про надписи.\n\nОн долго молчит. Потом: «Завтра я спущусь сам». Он не спускается. Никогда.`},
+    {text:"Отпереться", effects:()=>{setRel("father",-2);}, next:"next_day"},
+  ]},
+
+/* --- ОПЦИЯ ПЕРЕЕЗДА (появляется после 3 уровня) --- */
+thing_beg_move: { bg:"home", text:`${fmtDate()}.\n\nТы стоишь в дверях кухни. Мать чистит картошку, отец читает газету. Обычный вечер.\n\nТы набираешь воздуха. «Давайте переедем. На соседнюю улицу. Пожалуйста».`,
+  when:()=>state.thingLevel >= 3 && !flag("moved"),
+  choices:[
+    {text:"Рассказать всё", effects:()=>{
+      if(flag("mother_believes") && (flag("father_believes") || state.thingLevel >= 4)){
+        state.flags.moved = true;
+        setRel("mother", +3);
+        setRel("father", +2);
+        return playScene("moved_success");
+      } else {
+        state.flags.moveAttempts = (state.flags.moveAttempts||0) + 1;
+        setRel("father", -2);
+      }
+    }, next:"thing_move_refused",
+     after:`Ты рассказываешь — про тень, про голос, про надписи. Сбивчиво. Торопливо.\n\nМать смотрит на отца. Отец — в газету.`},
+    {text:"Просто попросить", effects:()=>{setRel("father",-1);state.flags.moveAttempts=(state.flags.moveAttempts||0)+1;}, next:"thing_move_refused",
+     after:`«Просто так. Хочу». Отец поднимает глаза. «С чего вдруг?» Ты не отвечаешь.`},
+    {text:"Промолчать", effects:()=>{}, next:"next_day"},
+  ]},
+
+thing_move_refused: { bg:"home", text:`Отец откладывает газету. Смотрит на тебя — не зло, устало.\n\n«${state.name}. У нас нет денег на переезд. И даже если бы были — с чего вдруг? Из-за твоих фантазий?»\n\nМать молчит. Она всегда молчит, когда он так говорит.`,
+  choices:[
+    {text:"Настаивать", effects:()=>{setRel("father",-2);setMental(-1);state.flags.moveAttempts=(state.flags.moveAttempts||0)+1;}, next:"next_day",
+     after:`Ты настаиваешь. Отец повышает голос. Мать уходит в комнату.\n\nНочью ты слышишь, как они ругаются. Из-за тебя.`},
+    {text:"Уйти", effects:()=>{setMental(-1);}, next:"next_day"},
+  ]},
+
+moved_success: { bg:"street", text:`${fmtDate()}.\n\nЧерез две недели вы переезжаете. Соседняя улица, старый дом, но другой. Светлее.\n\nПервую ночь ты спишь без снов. Впервые за много лет.`,
+  choices:[
+    {text:"Осмотреться", next:"next_day",
+     after:`Ты обходишь дом. Нет подвала — только кладовка, сухая и тёплая.\n\nТы стоишь в ней минуту. Слушаешь. Ничего.`},
+    {text:"Поблагодарить мать", effects:()=>{setRel("mother",+2);}, next:"next_day",
+     after:`Ты обнимаешь её. Она гладит тебя по голове. «Всё, милый. Всё».`},
+  ]},
+
+/* ========== СЦЕНА УЧИТЕЛЯ (генерируется) ========== */
+teacher_correct: { bg:"school", text:`Марина Павловна кивает. «Правильно. Садись». Класс молчит.\n\nКто-то смотрит с уважением. Ты возвращаешься на место. Лена шепчет: «Молодец».`,
+  choices:[
+    {text:"Улыбнуться Лене", effects:()=>{setRel("lena",+1);}, next:"next_day"},
+    {text:"Сесть молча", effects:()=>{}, next:"next_day"},
+  ]},
+
+teacher_wrong: { bg:"school", text:`Класс взрывается смехом.\n\n«Двоечник!» — кричит Дима с задней парты. Учительница стучит указкой: «Тихо!» Но смех ещё звенит в ушах.\n\nТы возвращаешься на место. Лена смотрит в пол.`,
+  choices:[
+    {text:"Сесть молча", effects:()=>{setMental(-1);}, next:"next_day"},
+    {text:"Крикнуть на класс", effects:()=>{setMental(-1);state.karma-=2;}, next:"next_day",
+     after:`Ты кричишь. Смех стихает. Дима поднимает брови: «Псих».\n\nСлово повисает в воздухе.`},
+    {text:"Улыбнуться", effects:()=>{setMental(+1);}, next:"next_day",
+     after:`Ты улыбаешься. Искренне. Смех стихает. Кто-то говорит: «Странный он».\n\nНо больше не смеются.`},
+  ]},
+
+/* ========== НОВЫЕ ПЕРСОНАЖИ ========== */
+neighbor_bab_valya: { bg:"neighbor", text:`${fmtDate()}.\n\nТы возвращаешься из школы. У подъезда сидит соседка — баба Валя. Старая, в платке, с клюкой.\n\nОна смотрит на тебя долго. Потом машет рукой: «Подойди».`,
+  when:()=>state.age>=7 && state.age<=12 && !flag("bab_valya_met"),
+  choices:[
+    {text:"Подойти", effects:()=>{state.flags.bab_valya_met=true;}, next:"bab_valya_talk",
+     after:`Ты подходишь. Она пахнет валидолом и старым деревом.`},
+    {text:"Пройти мимо", effects:()=>{}, next:"next_day"},
+  ]},
+
+bab_valya_talk: { bg:"neighbor", text:`Она берёт тебя за руку. Её пальцы сухие, как бумага.\n\n«Ты из квартиры четырнадцать? Из той, где подвал?» Ты киваешь. Она вздыхает.\n\n«Я тут живу шестьдесят лет. До вас там жила семья. Тоже с ребёнком. Мальчик был. Хороший. А потом…» Она замолкает.`,
+  choices:[
+    {text:"«Что потом?»", effects:()=>{state.fear+=2;}, next:"bab_valya_warning",
+     after:`Она долго смотрит в сторону. «А потом они съехали. Втроём не съехали, а вдвоём. Мальчика не стало».\n\nОна замолкает. Больше ничего не говорит.`},
+    {text:"«Не хочу знать»", effects:()=>{setMental(-1);}, next:"next_day",
+     after:`Она кивает. «Правильно. Не хочешь — не слушай».\n\nНо с этого дня ты думаешь об этом каждый раз, проходя мимо её подъезда.`},
+  ]},
+
+bab_valya_warning: { bg:"neighbor", text:`Она наклоняется ближе. Голос шёпотом.\n\n«Если услышишь его — не отвечай. Не зови. И матери скажи, чтоб съезжали. Пока не поздно».`,
+  next:"next_day"},
+
+dima_bully: { bg:"school", text:`${fmtDate()}.\n\nДима — самый высокий в классе. Он подходит к твоей парте на перемене, кладёт ладонь на твой учебник.\n\n«Новенький. Ты чё такой тихий?»`,
+  when:()=>state.age>=7 && state.age<=12 && !flag("dima_met"),
+  choices:[
+    {text:"Молчать", effects:()=>{setMental(-1);state.flags.dima_met=true;}, next:"next_day",
+     after:`Ты молчишь. Он смеётся, забирает учебник, уходит.\n\nЛена смотрит на тебя. Ничего не говорит.`},
+    {text:"«Отойди»", effects:()=>{state.flags.dima_met=true;state.karma-=1;}, next:"dima_fight",
+     after:`Ты говоришь это тихо, но твёрдо. Он поднимает брови. «Чё?»`},
+    {text:"Позвать Лену", effects:()=>{state.flags.dima_met=true;if(flag("lena_friend"))setRel("lena",+1);}, next:"next_day",
+     after:`Ты оборачиваешься. «Лен». Она уже встаёт.\n\nДима смотрит на неё — и почему-то отходит.`},
+  ]},
+
+dima_fight: { bg:"school", text:`Он толкает тебя в плечо. Не сильно — проверяет.\n\n«Чё сказал?»`,
+  choices:[
+    {text:"Толкнуть в ответ", effects:()=>{state.karma-=3;if(state.stamina>5)state.stamina-=2;else die("beaten",state.age);}, next:"next_day",
+     after:`Ты толкаешь. Он падает на парту. Класс ахает.\n\nМарина Павловна входит в этот момент. Тебя ведут к директору.`},
+    {text:"Отступить", effects:()=>{setMental(-1);}, next:"next_day"},
+  ]},
+
+/* ========== ШКОЛА 11–14 ========== */
+school_age12: { bg:"school", text:`${fmtDate()}.\n\nТебе двенадцать. Пятый класс. Новый классный руководитель, новые предметы. И Аня — тихая девочка с длинными волосами. Она сидит одна у окна. Её никто не любит. Ты не знаешь почему.\n\nМарина Павловна смотрит выжидающе: куда сядешь?`,
   choices:[
     {text:"Сесть с Аней", effects:()=>{setRel("anya",+2);}, next:"school_anya_friend",
-     after:`Аня удивлённо поднимает брови. «Ты уверен?» — шёпотом. Ты киваешь.`},
+     after:`Аня удивлённо поднимает брови. «Ты уверен?» — шёпотом. Ты киваешь.\n\nВесь урок она молчит. В конце говорит: «Спасибо». Не уточняет за что.`},
     {text:"Сесть с другими", effects:()=>{setRel("anya",-1);}, next:"school_crowd",
-     after:`Ты садишься к популярным. Они обсуждают кого-то. Это Аня.`},
+     after:`Ты садишься к популярным. Они обсуждают кого-то шёпотом. Ты понимаешь — это Аня.`},
     {text:"Сесть одному", effects:()=>{state.flags.loner=true;}, next:"school_alone",
-     after:`Ты садишься сзади. В отражении окна — кто-то позади. Оборачиваешься — пусто.`},
-    {text:"Крикнуть на весь класс", effects:()=>{state.karma-=3;}, next:"school_scream"},
+     after:`Ты садишься сзади. В отражении окна — кто-то позади. Оборачиваешься. Пусто.`},
   ]},
-school_scream: { bg:"school", text:`Ты кричишь. Все оборачиваются. Учительница бледнеет.`,
-  choices:[
-    {text:"Извиниться", effects:()=>{state.karma+=1;}, next:"next_day"},
-    {text:"Кричать снова", effects:()=>{state.karma-=3;}, next:"next_day"},
-  ]},
-school_anya_friend: { bg:"school", text:`Аня улыбается. Вы говорите весь урок.`,
+
+school_anya_friend: { bg:"school", text:`Аня улыбается. Вы говорите весь урок — о книгах, о кошках, о чём-то ещё.\n\nОна умная. Почему её никто не любит?`,
   choices:[
     {text:"Пригласить гулять", effects:()=>{setRel("anya",+3);}, next:"street_age12"},
     {text:"Молчать", effects:()=>{setRel("anya",+1);}, next:"next_day"},
-    {text:"Признаться в любви", effects:()=>{setRel("anya",+5);}, next:"anya_confess"},
   ]},
-anya_confess: { bg:"school", text:`Аня краснеет. «Ты странный». Но улыбается.`, next:"next_day"},
-school_crowd: { bg:"school", text:`Они смеются над Аней. Ты смеёшься с ними.`,
+
+school_crowd: { bg:"school", text:`Они смеются над Аней — тихо, чтобы не слышала учительница.\n\nДима показывает на неё пальцем. Кто-то прыскает.\n\nТы смеёшься с ними.`,
   choices:[
     {text:"Остановиться", effects:()=>{setRel("anya",+1);state.guilt+=2;}, next:"next_day"},
     {text:"Продолжать", effects:()=>{setRel("anya",-3);}, next:"next_day"},
-    {text:"Подставить одноклассника", effects:()=>{state.karma-=5;}, next:"next_day"},
+    {text:"Подставить Диму", effects:()=>{state.karma-=5;}, next:"next_day"},
   ]},
-school_alone: { bg:"school", text:`Ты один. В зеркале — кто-то позади тебя.`,
+
+school_alone: { bg:"school", text:`Ты один. В коридоре — зеркало. В отражении — кто-то позади тебя.`,
   choices:[
     {text:"Обернуться", effects:()=>{state.fear+=3;}, next:"mirror_age12"},
     {text:"Не смотреть", effects:()=>{state.fear+=1;}, next:"next_day"},
     {text:"Разбить зеркало", effects:()=>{state.karma-=3;state.fear+=4;}, next:"next_day"},
   ]},
+
 mirror_age12: { bg:"corridor_night", text:`Никого. Но отражение улыбается на секунду позже тебя.`, next:"next_day"},
-school_corridor_age13: { bg:"corridor", text:`${fmtDate()}. Перемена. Ты толкнул Аню. Она упала, учебники рассыпались. Класс засмеялся.`,
+
+school_corridor_age13: { bg:"corridor", text:`${fmtDate()}.\n\nПеремена. Ты случайно толкаешь Аню. Она падает, учебники рассыпаются. Класс замирает. Потом — смех.\n\nАня смотрит на тебя снизу вверх.`,
   choices:[
     {text:"Помочь встать", effects:()=>{setRel("anya",+3);state.flags.kind=true;}, next:"corridor_apology",
-     after:`Ты протягиваешь руку. Она смотрит секунду — потом берёт. «Спасибо».`},
+     after:`Ты протягиваешь руку. Она смотрит на неё секунду — потом берёт.\n\n«Спасибо», — говорит тихо. Никто не смеётся.`},
     {text:"Нагрубить", effects:()=>{setRel("anya",-5);state.flags.grudge=true;schedule(84,"anya_revenge");}, next:"corridor_insult",
-     after:`«Сама виновата». Ты уходишь. Она смотрит в спину. Ты чувствуешь этот взгляд неделю.`},
+     after:`«Сама виновата. Смотреть надо». Ты уходишь. Она смотрит тебе в спину.\n\nТы чувствуешь этот взгляд всю неделю.`},
     {text:"Толкнуть сильнее", effects:()=>{setRel("anya",-8);if(Math.random()<.3)die("anya_push",13,"anya");}, next:"next_day",
      after:`Ты наступаешь на её тетрадь. Она не плачет. Просто смотрит. Запоминает.`},
-    {text:"Толкнуть на дорогу", effects:()=>{setRel("anya",-10);if(Math.random()<.6)state.flags.killed_someone=true;}, next:"next_day",
-     after:`Ты выбегаешь за ней. Свет фар. Визг тормозов.`},
   ]},
+
 corridor_apology: { bg:"corridor", text:`Ты протянул руку. Она не взяла, но запомнила.`, next:"next_day"},
 corridor_insult: { bg:"corridor", text:`«Сама виновата». Ты ушёл. Она смотрела в спину.`, next:"next_day"},
-street_age12: { bg:"street", text:`Вы гуляете с Аней. Она рассказывает про отца, который ушёл.`,
+
+street_age12: { bg:"street", text:`${fmtDate()}.\n\nВы гуляете с Аней. Осень. Листья под ногами, холодный воздух.\n\nОна рассказывает про отца, который ушёл два года назад. Голос ровный, будто читает по бумаге.`,
   choices:[
     {text:"Рассказать про подвал", effects:()=>{setRel("anya",+2);}, next:"street_secret"},
     {text:"Сменить тему", effects:()=>{setRel("anya",+1);}, next:"next_day"},
     {text:"Толкнуть под машину", effects:()=>{setRel("anya",-10);if(Math.random()<.7)state.flags.killed_someone=true;}, next:"next_day",
      after:`Ты толкаешь. Она падает на дорогу.`},
   ]},
-street_secret: { bg:"street", text:`Аня смотрит странно. «Я тоже его видела».`, next:"next_day"},
-school_bully_age12: { bg:"school", text:`${fmtDate()}. Старшеклассник отобрал рюкзак. Лена рядом, сжав кулаки.`,
+
+street_secret: { bg:"street", text:`Аня смотрит странно. «Я тоже его видела».\n\nТы замираешь. «Кого?» Она не отвечает.`, next:"next_day"},
+
+school_bully_age12: { bg:"school", text:`${fmtDate()}.\n\nСтаршеклассник отобрал твой рюкзак. Он держит его высоко над головой и смеётся. Лена рядом, сжав кулаки.`,
   when:()=>flag("lena_friend")&&!flag("lena_left")&&!flag("lena_dead"),
   choices:[
     {text:"Позвать Лену", effects:()=>{const r=lenaProtect();if(r)return playScene(r);}, next:"next_day",
-     after:`Лена делает шаг. «Отдай». Он смотрит — и отдаёт.`},
+     after:`Лена делает шаг. «Отдай». Он смотрит на неё — и отдаёт.\n\nТы не понимаешь, чего он испугался.`},
     {text:"Дать сдачи", effects:()=>{if(state.stamina>5)state.stamina-=2;else die("beaten",12);}, next:"next_day",
-     after:`Ты бросаешься. Удар. Боль. Ты лежишь. Но рюкзак твой.`},
+     after:`Ты бросаешься. Удар. Боль. Ты лежишь на полу. Но рюкзак твой.`},
     {text:"Отдать рюкзак", effects:()=>{setMental(-2);}, next:"next_day"},
   ]},
+
 lena_death: { bg:"hospital", text:`Лена в больнице. Врач качает головой. «Она не выживет».`,
-  choices:[{text:"Держать за руку", effects:()=>{setMental(-3);}, next:"next_day", after:`Ты держишь её руку. Она холодная. Утром её не станет.`}]},
-school_use_lena: { bg:"school", text:`Ты разбил окно. Учитель идёт. Лена может сказать, что это она.`,
-  when:()=>flag("lena_friend")&&!flag("lena_left")&&!flag("lena_dead"),
-  choices:[
-    {text:"Сказать правду", effects:()=>{state.karma+=2;}, next:"next_day"},
-    {text:"Попросить Лену прикрыть", effects:()=>{const r=lenaUse();if(r)return playScene(r);}, next:"next_day"},
-    {text:"Свалить на Лену", effects:()=>{state.karma-=5;const r=lenaUse();if(r)return playScene(r);}, next:"next_day"},
-  ]},
-lena_leaves: { bg:"street", text:`Лена с рюкзаком. «Я больше не буду твоей тенью». Уходит. Навсегда.`,
-  choices:[{text:"Смотреть вслед", effects:()=>{setMental(-2);}, next:"next_day", after:`Ты смотришь, пока она не исчезает из виду.`}]},
+  choices:[{text:"Держать за руку", effects:()=>{setMental(-3);}, next:"next_day",
+   after:`Ты держишь её руку. Она холодная.\n\nУтром её не станет.`}]},
+
 lena_neutral_food: { bg:"park", text:`Лена ест бутерброд. «Хочешь половину?»`,
   when:()=>flag("lena_friend")&&!flag("lena_left")&&!flag("lena_dead"),
   choices:[
@@ -383,6 +575,7 @@ lena_neutral_food: { bg:"park", text:`Лена ест бутерброд. «Хо
     {text:"Отказаться", effects:()=>{}, next:"next_day"},
     {text:"Съесть весь", effects:()=>{setRel("lena",-1);}, next:"next_day"},
   ]},
+
 lena_neutral_dream: { bg:"park", text:`Лена: «Кем хочешь стать?»`,
   when:()=>flag("lena_friend")&&!flag("lena_left")&&!flag("lena_dead"),
   choices:[
@@ -390,494 +583,227 @@ lena_neutral_dream: { bg:"park", text:`Лена: «Кем хочешь стат�
     {text:"«Никем»", effects:()=>{setMental(-1);}, next:"next_day"},
     {text:"«Президентом мира»", effects:()=>{state.karma-=1;}, next:"next_day"},
   ]},
-beat_classmate_age13: { bg:"school", text:`Одноклассник смеётся. Кулаки сжимаются сами.`,
+
+/* ========== 9 КЛАСС: ВЫБОР ПОСЛЕ ОГЭ ========== */
+exam9_choice: { bg:"school", text:`${fmtDate()}. Тебе пятнадцать.\n\nОГЭ позади. Аттестат на руках — с тройками и четвёрками. Впереди — выбор.\n\nМарина Павловна собрала вас в классе. «Кто остаётся в десятый? Кто уходит?» Лена смотрит на тебя.`,
+  when:()=>state.age===15 && !flag("exam9_done"),
   choices:[
-    {text:"Ударить", effects:()=>{state.karma-=5;if(Math.random()<.2)state.flags.killed_someone=true;}, next:"next_day"},
-    {text:"Сдержаться", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Насмехаться в ответ", effects:()=>{state.karma-=2;}, next:"next_day"},
-  ]},
-lena_needs_help_age14: { bg:"street", text:`Лена у подъезда. Глаза красные. «У меня дома плохо. Можно переночевать?»`,
-  when:()=>flag("lena_friend")&&!flag("lena_left")&&!flag("lena_dead"),
-  choices:[
-    {text:"Помочь", effects:()=>{setRel("lena",+3);}, next:"next_day",
-     after:`Мать ворчит, но стелет на диване. Ночью Лена плачет. Ты просто сидишь рядом.`},
-    {text:"Отказать", effects:()=>{setRel("lena",-4);setMental(-1);}, next:"next_day"},
-    {text:"Использовать ситуацию", effects:()=>{state.karma-=10;setRel("lena",-10);state.flags.killed_someone=true;}, next:"next_day"},
+    {text:"Остаться в школе (10–11 класс)", effects:()=>{state.flags.exam9_done=true;state.flags.school_10_11=true;}, next:"next_day",
+     after:`Ты подаёшь документы в десятый. Лена остаётся с тобой.\n\n«Ну и хорошо», — говорит она. И улыбается.`},
+    {text:"Уйти в колледж", effects:()=>{state.flags.exam9_done=true;state.flags.college=true;}, next:"next_day",
+     after:`Ты подаёшь в колледж. На повара, как хотела мать.\n\nЛена остаётся в школе. Вы обещаете друг другу писать. Первые два месяца пишете. Потом — реже.`},
+    {text:"Пойти работать", effects:()=>{state.flags.exam9_done=true;state.flags.work9=true;}, next:"next_day",
+     after:`Ты идёшь работать. Дворником, как сосед. Мать плачет, но не запрещает.\n\nЛена остаётся в школе. Она смотрит на тебя в день, когда ты приходишь за документами. Ничего не говорит.`},
   ]},
 
-/* ========== 15–18 ========== */
-lena_protect_serious_age15: { bg:"corridor_night", text:`Тебя прижали трое. Лена вперёд. «Не трогайте ${g("его","её")}». Голос дрожит.`,
-  when:()=>flag("lena_friend")&&!flag("lena_left")&&!flag("lena_dead"),
+/* ========== 11 КЛАСС: ВЫБОР ПОСЛЕ ЕГЭ ========== */
+exam11_choice: { bg:"school", text:`${fmtDate()}. Тебе семнадцать.\n\nЕГЭ позади. Баллы пришли по почте. Мать читает их вслух — медленно, будто не верит.`,
+  when:()=>state.age===17 && flag("school_10_11") && !flag("exam11_done"),
   choices:[
-    {text:"Позволить защитить", effects:()=>{const r=lenaProtect();if(r)return playScene(r);}, next:"next_day",
-     after:`Она что-то говорит им. Они уходят. Лена оборачивается: «Ты как?»`},
-    {text:"Встать рядом", effects:()=>{setRel("lena",+2);if(state.stamina>5)state.stamina-=3;else die("beaten",15);}, next:"next_day"},
-    {text:"Сбежать, бросив Лену", effects:()=>{state.karma-=10;setRel("lena",-10);const r=lenaUse();if(r)return playScene(r);die("lena_avenge",15,"трое");}},
-  ]},
-club_age16: { bg:"corridor_night", text:`${fmtDate()}. Заброшенный клуб. Тебя пригласили.`,
-  choices:[
-    {text:"Пойти", effects:()=>{state.fear+=2;}, next:"club_inside"},
-    {text:"Отказаться", effects:()=>{}, next:"next_day"},
-    {text:"Позвать Аню", effects:()=>{setRel("anya",+2);}, next:"club_with_anya"},
-    {text:"Сжечь клуб", effects:()=>{state.karma-=10;if(Math.random()<.4)die("fire",16);}, next:"next_day"},
-  ]},
-club_inside: { bg:"corridor_night", text:`Свечи. Люди в капюшонах. В центре — круг на полу.`,
-  choices:[
-    {text:"Войти в круг", effects:()=>{state.fear+=5;}, next:"club_ritual"},
-    {text:"Стоять у двери", effects:()=>{state.fear+=2;}, next:"club_watch"},
-    {text:"Уйти", effects:()=>{}, next:"next_day"},
-  ]},
-club_ritual: { bg:"corridor_night", text:`Они поют. Что-то тянет вниз. Кто-то берёт за руку.`,
-  choices:[
-    {text:"Отпустить", effects:()=>{if(state.fear>6)die("ritual",16);}, next:"next_day"},
-    {text:"Сжать", effects:()=>{state.fear+=3;}, next:"next_day"},
-    {text:"Укусить за руку", effects:()=>{if(Math.random()<.5)die("ritual",16);}, next:"next_day"},
-  ]},
-club_watch: { bg:"corridor_night", text:`Один снимает капюшон. Это Аня. Смотрит прямо на тебя.`,
-  choices:[
-    {text:"Подойти", effects:()=>{setRel("anya",-2);}, next:"next_day"},
-    {text:"Уйти", effects:()=>{}, next:"next_day"},
-  ]},
-club_with_anya: { bg:"corridor_night", text:`Аня у двери: «Ты уверен?»`,
-  choices:[
-    {text:"Уверен", effects:()=>{state.fear+=3;}, next:"club_inside"},
-    {text:"Уйти вместе", effects:()=>{setRel("anya",+3);}, next:"next_day"},
-  ]},
-forest_age17: { bg:"forest", text:`${fmtDate()}. Лес. Кто-то предлагает пойти к колодцу.`,
-  choices:[
-    {text:"Пойти", effects:()=>{state.fear+=2;}, next:"well_age17"},
-    {text:"Остаться у костра", effects:()=>{}, next:"next_day"},
-    {text:"Поджечь лес", effects:()=>{if(Math.random()<.5)die("wildfire",17);}, next:"next_day"},
-  ]},
-well_age17: { bg:"forest", text:`Колодец сухой. На дне — что-то белое.`,
-  choices:[
-    {text:"Заглянуть", effects:()=>{state.fear+=4;}, next:"well_look"},
-    {text:"Оттащить друга", effects:()=>{}, next:"next_day"},
-    {text:"Бросить камень", effects:()=>{state.fear+=3;}, next:"well_stone"},
-    {text:"Спуститься вниз", effects:()=>{if(Math.random()<.5)die("well",17);}, next:"next_day"},
-  ]},
-well_look: { bg:"forest", text:`На дне — лицо. Твоё. Старше тебя.`, next:"next_day"},
-well_stone: { bg:"forest", text:`Камень не достигает дна. Тишина.`, next:"next_day"},
-push_from_roof_age16: { bg:"rooftop", text:`Ты на крыше с другом. Он слишком близко к краю.`,
-  choices:[
-    {text:"Отойти", effects:()=>{}, next:"next_day"},
-    {text:"Толкнуть", effects:()=>{state.karma-=20;state.flags.killed_someone=true;}, next:"next_day",
-     after:`Ты толкаешь. Он падает. Ты смотришь вниз. Потом уходишь.`},
-    {text:"Схватить за руку", effects:()=>{state.karma+=3;}, next:"next_day"},
-  ]},
-absurd_president_age17: { bg:"street", text:`Ты кричишь на площади: «Я стану президентом мира!»`,
-  choices:[
-    {text:"Продолжать", effects:()=>{setMental(-2);}, next:"next_day"},
-    {text:"Извиниться", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Собирать подписи", effects:()=>{}, next:"next_day"},
+    {text:"Университет", effects:()=>{state.flags.exam11_done=true;state.flags.uni=true;}, next:"next_day",
+     after:`Ты подаёшь в университет. На бюджет — с твоими баллами должно хватить.\n\nЛена подаёт в другой город. Вы прощаетесь на вокзале. Она плачет. Ты — нет.`},
+    {text:"Колледж", effects:()=>{state.flags.exam11_done=true;state.flags.college2=true;}, next:"next_day"},
+    {text:"Работа", effects:()=>{state.flags.exam11_done=true;state.flags.work11=true;}, next:"next_day"},
+    {text:"Армия", when:()=>state.gender==="boy", effects:()=>{state.flags.exam11_done=true;state.flags.army=true;}, next:"next_day",
+     after:`Ты идёшь в армию. Мать провожает тебя на сборный пункт.\n\nЛена стоит рядом, мнёт в руках платок. Не плачет при тебе.`},
   ]},
 
-/* ========== 19–22 ========== */
-uni_age19: { bg:"school", text:`${fmtDate()}. Первый курс. ${glance()}Кто-то предлагает пойти в бар.`,
+/* ========== ВЗРОСЛАЯ ЖИЗНЬ ========== */
+uni_age19: { bg:"school", text:`${fmtDate()}. Первый курс. ${glance()}Ты сидишь на лекции — огромный амфитеатр, двести человек.\n\nКто-то на заднем ряду предлагает пойти в бар.`,
   choices:[
     {text:"Пойти", effects:()=>{setMental(-1);}, next:"next_day"},
     {text:"Остаться учиться", effects:()=>{}, next:"next_day"},
     {text:"Уйти домой", effects:()=>{}, next:"next_day"},
-    {text:"Позвонить Лене", effects:()=>{if(flag("lena_left")||flag("lena_dead"))return;setRel("lena",+1);}, next:"next_day"},
   ]},
-love_age20: { bg:"park", text:`${glance()}Ты ${g("влюбился","влюбилась")}. Есть кто-то.`,
+
+love_age20: { bg:"park", text:`${fmtDate()}.\n\n${glance()}Ты ${g("влюбился","влюбилась")}.\n\nЕё ${g("зовут Маша","зовут Маша")}. Она смеётся над твоими шутками. Это редкое чувство — когда кто-то смеётся искренне.`,
   choices:[
     {text:"Признаться", effects:()=>{setMental(+2);}, next:"love_yes"},
     {text:"Молчать", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Написать анонимно", effects:()=>{}, next:"next_day"},
   ]},
+
 love_yes: { bg:"park", text:`Ответ: «Я тоже». Что дальше?`,
   choices:[
     {text:"Отношения", effects:()=>{state.flags.partner=true;setMental(+2);}, next:"next_day"},
     {text:"Дружба", effects:()=>{setMental(-1);}, next:"next_day"},
     {text:"Использовать", effects:()=>{state.karma-=5;setMental(-1);}, next:"next_day"},
   ]},
-alcohol_age19: { bg:"street", text:`Вечеринка. Тебе предлагают выпить. ${glance()}Кто-то уже еле стоит.`,
+
+alcohol_age19: { bg:"street", text:`${fmtDate()}. Вечеринка. ${glance()}Тебе предлагают выпить.\n\nКто-то уже еле стоит.`,
   choices:[
     {text:"Пить", effects:()=>{setMental(-2);if(Math.random()<.1)die("poisoned",19);}, next:"next_day"},
     {text:"Отказаться", effects:()=>{state.karma+=1;}, next:"next_day"},
     {text:"Пить до беспамятства", effects:()=>{if(Math.random()<.3)die("choke",19);else setMental(-3);}, next:"next_day"},
   ]},
-drugs_age20: { bg:"corridor_night", text:`«Попробуй один раз». ${glance()}`,
-  choices:[
-    {text:"Попробовать", effects:()=>{setMental(-3);if(Math.random()<.2)die("wrong_med",20);}, next:"next_day"},
-    {text:"Отказаться", effects:()=>{}, next:"next_day"},
-    {text:"Донести в полицию", effects:()=>{state.karma+=3;}, next:"next_day"},
-  ]},
+
 accident_age22: { bg:"road", text:`${fmtDate()}. Дорога. Свет фар. Тормоза.`,
   choices:[
     {text:"Отпрыгнуть", effects:()=>{if(state.stamina<=5)die("car",22);}, next:"next_day"},
     {text:"Замереть", effects:()=>{die("car",22);}},
     {text:"Толкнуть прохожего", effects:()=>{state.karma-=10;if(Math.random()<.5)state.flags.killed_someone=true;}, next:"next_day"},
-    {text:"Прыгнуть под поезд", effects:()=>{die("jumped_train",22);}},
   ]},
-job_age22: { bg:"street", text:`Ты ${g("закончил","закончила")} учёбу. Работа?`,
+
+job_age22: { bg:"street", text:`${fmtDate()}. Ты ${g("закончил","закончила")} учёбу. Работа?`,
   choices:[
     {text:"Офис", effects:()=>{setMental(-1);}, next:"next_day"},
     {text:"Стройка", effects:()=>{state.stamina+=2;if(Math.random()<.15)die("fall",22);}, next:"next_day"},
     {text:"Своё дело", effects:()=>{state.karma-=1;}, next:"next_day"},
     {text:"Не работать", effects:()=>{setMental(-2);}, next:"next_day"},
   ]},
-uni_stranger: { bg:"school", text:`Она оборачивается. Аня. Улыбается неестественно.`,
-  choices:[
-    {text:"Заговорить", effects:()=>{setRel("anya",+2);}, next:"next_day"},
-    {text:"Уйти", effects:()=>{setRel("anya",-2);state.fear+=2;}, next:"next_day"},
-    {text:"Ударить", effects:()=>{state.karma-=10;setRel("anya",-10);if(Math.random()<.5)state.flags.killed_someone=true;}, next:"next_day"},
-  ]},
 
-/* ========== кома ========== */
-coma_age23: { bg:"hospital", text:`${fmtDate()}. Ты в коме. Слышишь всё. Не можешь открыть глаза.`,
-  choices:[
-    {text:"Бороться", effects:()=>{state.stamina-=3;}, next:"coma_wake"},
-    {text:"Сдаться", effects:()=>{die("coma",23);}},
-    {text:"Слушать голоса", effects:()=>{}, next:"coma_voices"},
-  ]},
-coma_voices: { bg:"hospital", text:`Мать плачет. Голос Ани: «Он сам виноват».`,
-  choices:[
-    {text:"Запомнить", effects:()=>{setRel("anya",-2);}, next:"coma_wake"},
-    {text:"Проснуться", effects:()=>{}, next:"coma_wake"},
-  ]},
-coma_wake: { bg:"hospital", text:`Ты просыпаешься. Прошло два года. Мать постарела на десять.`, next:"next_day"},
-
-/* ========== 25–52 ========== */
-career_age25: { bg:"street", text:`${glance()}Начальник предлагает повышение «за компромат на коллегу».`,
+career_age25: { bg:"street", text:`${fmtDate()}. ${glance()}Начальник предлагает повышение «за компромат на коллегу».`,
   choices:[
     {text:"Согласиться", effects:()=>{state.karma-=5;}, next:"next_day"},
     {text:"Отказаться", effects:()=>{state.karma+=2;}, next:"next_day"},
     {text:"Сдать начальника", effects:()=>{state.karma+=3;if(Math.random()<.3)die("killed_stranger",25,"коллега");}, next:"next_day"},
   ]},
-marriage_age28: { bg:"home", text:`${glance()}Партнёр делает предложение.`,
+
+marriage_age28: { bg:"home", text:`${fmtDate()}. ${glance()}Партнёр делает предложение.`,
   when:()=>state.flags.partner,
   choices:[
     {text:"Согласиться", effects:()=>{state.flags.married=true;setMental(+1);}, next:"next_day"},
     {text:"Отказаться", effects:()=>{setRel("partner",-5);}, next:"next_day"},
     {text:"Изменить", effects:()=>{state.karma-=5;if(Math.random()<.5)die("killed_lover",28,"партнёр");}, next:"next_day"},
   ]},
-child_birth_age30: { bg:"hospital", text:`${g("Твоя жена рожает","Ты рожаешь")}.`,
+
+child_birth_age30: { bg:"hospital", text:`${fmtDate()}.\n\n${g("Твоя жена рожает","Ты рожаешь")}.`,
   when:()=>state.flags.married,
   choices:[
     {text:"Быть рядом", effects:()=>{setRel("child",+3);setMental(+1);}, next:"next_day"},
     {text:"Уйти курить", effects:()=>{setRel("child",-2);}, next:"next_day"},
     {text:"Сбежать", effects:()=>{state.karma-=10;die("old_alone",state.age,"судьба");}},
   ]},
-affair_age32: { bg:"street", text:`${glance()}На работе кто-то смотрит слишком долго.`,
-  when:()=>state.flags.married,
-  choices:[
-    {text:"Ответить взглядом", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Отвернуться", effects:()=>{state.karma+=2;}, next:"next_day"},
-    {text:"Уволиться", effects:()=>{}, next:"next_day"},
-  ]},
-midlife_age40: { bg:"home", text:`${glance()}Ты покупаешь спортивную машину или красишь волосы в синий.`,
+
+midlife_age40: { bg:"home", text:`${fmtDate()}. ${glance()}Ты покупаешь спортивную машину или красишь волосы в синий.`,
   choices:[
     {text:"Машина", effects:()=>{}, next:"next_day"},
     {text:"Синие волосы", effects:()=>{setMental(+1);}, next:"next_day"},
     {text:"Пластика", effects:()=>{if(Math.random()<.1)die("surgery",40);}, next:"next_day"},
     {text:"Ничего", effects:()=>{setMental(-1);}, next:"next_day"},
   ]},
+
 family_age35: { bg:"home", text:`${fmtDate()}. Ребёнок спрашивает про подвал в старом доме.`,
   choices:[
-    {text:"Сказать правду", effects:()=>{setRel("child",+2);}, next:"family_truth"},
-    {text:"Солгать", effects:()=>{}, next:"family_lie"},
-    {text:"Ударить ребёнка", effects:()=>{state.karma-=10;setRel("child",-8);}, next:"next_day"},
-    {text:"Задушить ребёнка", effects:()=>{state.karma-=20;state.flags.killed_someone=true;}, next:"next_day"},
+    {text:"Сказать правду", effects:()=>{setRel("child",+2);state.flags.told_truth=true;}, next:"next_day"},
+    {text:"Солгать", effects:()=>{state.flags.told_lie=true;}, next:"next_day"},
   ]},
-family_truth: { bg:"home", text:`Ребёнок не боится. «Значит, ты его победил?»`, next:"next_day"},
-family_lie: { bg:"home", text:`«Там ничего нет». Ты слышишь свои слова из шести лет.`, next:"next_day"},
-return_age45: { bg:"corridor_night", text:`Ты вернулся в старую школу. Аня в конце коридора.`,
-  when:()=>flag("grudge")&&rel("anya")<-3,
-  choices:[
-    {text:"Подойти", effects:()=>{playSfx("glitch");shake();die("anya_stab",45,"anya");}},
-    {text:"Бежать", effects:()=>{if(state.stamina<=5){playSfx("glitch");shake();die("anya_stab",45,"anya");}}, next:"next_day"},
-    {text:"Спросить «зачем?»", effects:()=>{if(!flag("kind")){playSfx("glitch");shake();die("anya_stab",45,"anya");}}, next:"next_day"},
-  ]},
-parents_die_age45: { bg:"hospital", text:`${glance()}Мать при смерти. Врач: «Не доживёт до утра».`,
+
+parents_die_age45: { bg:"hospital", text:`${fmtDate()}. ${glance()}Мать при смерти. Врач: «Не доживёт до утра».`,
   choices:[
     {text:"Быть рядом", effects:()=>{setRel("mother",+2);setMental(-2);}, next:"next_day"},
     {text:"Уйти", effects:()=>{setRel("mother",-5);setMental(-3);}, next:"next_day"},
-    {text:"Сказать «я ненавижу тебя»", effects:()=>{setRel("mother",-10);setMental(-5);}, next:"next_day"},
   ]},
-health_age50: { bg:"hospital", text:`${glance()}Анализы плохие. Врач: «Есть варианты».`,
+
+health_age50: { bg:"hospital", text:`${fmtDate()}. ${glance()}Анализы плохие. Врач: «Есть варианты».`,
   choices:[
     {text:"Лечиться", effects:()=>{if(Math.random()<.7){}else die("cancer",50);}, next:"next_day"},
     {text:"Отказаться", effects:()=>{die("cancer",50);}},
     {text:"Народная медицина", effects:()=>{if(Math.random()<.3)die("wrong_med",50);}, next:"next_day"},
   ]},
-friend_die_age55: { bg:"street", text:`${glance()}Умирает старый друг. На похоронах — почти никого.`,
-  choices:[
-    {text:"Пойти", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Не пойти", effects:()=>{setMental(-2);}, next:"next_day"},
-    {text:"Напиться", effects:()=>{setMental(-2);if(Math.random()<.1)die("poisoned",55);}, next:"next_day"},
-  ]},
-divorce_age52: { bg:"home", text:`${glance()}Партнёр подаёт на развод.`,
+
+divorce_age52: { bg:"home", text:`${fmtDate()}. ${glance()}Партнёр подаёт на развод.`,
   when:()=>state.flags.married,
   choices:[
     {text:"Согласиться", effects:()=>{setMental(-2);}, next:"next_day"},
     {text:"Бороться", effects:()=>{setMental(-3);if(Math.random()<.3)die("heart",52);}, next:"next_day"},
-    {text:"Убить партнёра", effects:()=>{state.karma-=20;state.flags.killed_someone=true;}, next:"next_day"},
   ]},
 
-/* ========== 65+ ========== */
-old_age65: { bg:"home", text:`${fmtDate()}. Выход на пенсию. Внуки играют во дворе.`,
+/* ========== СТАРОСТЬ ========== */
+old_age65: { bg:"home", text:`${fmtDate()}. Тебе шестьдесят пять.\n\nВыход на пенсию. Внуки играют во дворе. Ты смотришь в окно.`,
   choices:[
     {text:"Позвать их", effects:()=>{setMental(+1);}, next:"next_day"},
     {text:"Закрыть шторы", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Написать письмо в прошлое", effects:()=>{setMental(+1);}, next:"next_day"},
   ]},
-old_70: { bg:"home", text:`70. Врач: «Вам нельзя одному».`,
-  choices:[
-    {text:"Переехать к детям", effects:()=>{if(rel("child")>=3)setMental(+1);else setMental(-2);}, next:"next_day"},
-    {text:"Нанять сиделку", effects:()=>{}, next:"next_day"},
-    {text:"Остаться одному", effects:()=>{setMental(-2);}, next:"next_day"},
-  ]},
-old_75: { bg:"home", text:`75. Память подводит. Ты забываешь имена.`,
+
+old_75: { bg:"home", text:`${fmtDate()}. 75. Память подводит. Ты забываешь имена.`,
   choices:[
     {text:"Записывать всё", effects:()=>{setMental(+1);}, next:"next_day"},
     {text:"Смириться", effects:()=>{setMental(-2);}, next:"next_day"},
-    {text:"Рассказать внукам", effects:()=>{setMental(+2);}, next:"next_day"},
   ]},
-old_80: { bg:"home", text:`80. Врач: «Вам осталось немного».`,
+
+old_80: { bg:"home", text:`${fmtDate()}. 80. Врач: «Вам осталось немного».`,
   choices:[
     {text:"Позвать всех", effects:()=>{if(rel("child")>=3||rel("lena")>=5)die("old_family",80);else die("old_alone",80);}},
-    {text:"Молиться", effects:()=>{die("old_faith",80);}},
     {text:"Принять таблетки", effects:()=>{die("pills",80);}},
     {text:"Просто сидеть", effects:()=>{die("old_sleep",80);}},
   ]},
-old_85: { bg:"home", text:`85. Кто-то стучит в дверь.`,
-  choices:[
-    {text:"Открыть", effects:()=>{if(flag("accepted"))die("old_family",85);else die("ghost",85);}},
-    {text:"Не открывать", effects:()=>{die("old_alone",85);}},
-  ]},
-old_90: { bg:"home", text:`90. Ты — легенда района.`,
-  choices:[
-    {text:"Собрать всех", effects:()=>{die("old_family",90);}},
-    {text:"Уйти тихо", effects:()=>{die("old_sleep",90);}},
-    {text:"Сказать «я устал»", effects:()=>{die("old_age",90);}},
-  ]},
-old_age_loop: { bg:"home", text:`${fmtDate()}. Ещё год. ${glance()}Вопрос — зачем?`,
+
+old_age_loop: { bg:"home", text:`${fmtDate()}. ${glance()}Ещё год. Вопрос — зачем?`,
   choices:[
     {text:"Продолжать", effects:()=>{
-      if(state.age<70) playScene("old_70");
-      else if(state.age<75) playScene("old_75");
+      if(state.age<75) playScene("old_75");
       else if(state.age<80) playScene("old_80");
-      else if(state.age<85) playScene("old_85");
-      else if(state.age<90) playScene("old_90");
       else die("old_age",state.age);
     }},
     {text:"Закончить самому", effects:()=>{die("pills",state.age);}},
-    {text:"Позвонить Лене", effects:()=>{
-      if(flag("lena_dead")||flag("lena_left")) die("old_alone",state.age);
-      else { setRel("lena",+2); setMental(+2); }
-    }, next:"next_day"},
   ]},
 
 /* ========== ДЕНЬ РОЖДЕНИЯ ========== */
-birthday: { bg:"home", text:`Сегодня твой день рождения. ${state.age} лет. Мать ставит торт.`,
+birthday_kid: { bg:"home", text:`28 ноября. Тебе ${state.age}.\n\nТорт на столе. Свечи. Мать стоит рядом, улыбается — но глаза грустные.`,
+  when:()=>state.age<12,
   choices:[
     {text:"Задуть свечи", effects:()=>{setMental(+2);}, next:"next_day",
-     after:`Ты задуваешь. Один огонёк не гаснет. Дуешь ещё — исчезает. Мать улыбается, но глаза грустные.`},
-    {text:"Позвать друзей", effects:()=>{setMental(+1);}, next:"birthday_guests"},
-    {text:"Тихо посидеть", effects:()=>{setMental(-1);}, next:"next_day"},
+     after:`Ты задуваешь. Один огонёк не гаснет. Дуешь ещё раз — исчезает.\n\nМать улыбается. Но в глазах — что-то ещё.`},
+    {text:"Позвать Лену", when:()=>flag("lena_friend"), effects:()=>{setRel("lena",+1);setMental(+1);}, next:"next_day",
+     after:`Лена приходит с самодельной открыткой. На ней — две фигурки и солнце.\n\n«Это мы», — говорит она. Ты вешаешь открытку над кроватью.`},
   ]},
-birthday_guests: { bg:"home", text:`${flag("lena_friend") && !flag("lena_left") && !flag("lena_dead") ? "Лена пришла. Принесла самодельную открытку." : "Никто не пришёл."}`,
-  choices:[
-    {text:"Поблагодарить", effects:()=>{setMental(+1);if(flag("lena_friend"))setRel("lena",+1);}, next:"next_day"},
-    {text:"Устроить скандал", effects:()=>{setMental(-2);if(flag("lena_friend"))setRel("lena",-3);}, next:"next_day"},
-  ]},
-birthday_teen: { bg:"home", text:`${state.age}. День рождения.`,
+
+birthday_teen: { bg:"home", text:`28 ноября. Тебе ${state.age}.\n\nДень рождения.`,
   when:()=>state.age>=12&&state.age<19,
   choices:[
-    {text:"Вечеринку", effects:()=>{setMental(+2);}, next:"birthday_party_teen"},
     {text:"С семьёй", effects:()=>{setRel("mother",+1);setMental(+1);}, next:"next_day"},
-    {text:"Сбежать", effects:()=>{setMental(-2);}, next:"birthday_runaway"},
+    {text:"Вечеринку", effects:()=>{setMental(+2);if(Math.random()<.3)state.flags.drugs=true;}, next:"next_day"},
   ]},
-birthday_party_teen: { bg:"home", text:`Кто-то предлагает «кое-что поинтереснее».`,
-  choices:[
-    {text:"Попробовать", effects:()=>{setMental(-2);}, next:"next_day"},
-    {text:"Отказаться", effects:()=>{setMental(+1);}, next:"next_day"},
-  ]},
-birthday_runaway: { bg:"street", text:`Ночь. Куда идти?`,
-  choices:[
-    {text:"К Лене", effects:()=>{if(flag("lena_left")||flag("lena_dead")){setMental(-2);return;}setRel("lena",+2);setMental(+1);}, next:"next_day"},
-    {text:"Просто гулять", effects:()=>{setMental(-1);}, next:"next_day"},
-  ]},
-birthday_adult: { bg:"home", text:`${state.age} лет. День рождения.`,
+
+birthday_adult: { bg:"home", text:`28 ноября. Тебе ${state.age}.`,
   when:()=>state.age>=19&&state.age<65,
   choices:[
     {text:"С близкими", effects:()=>{setMental(+2);}, next:"next_day"},
     {text:"Работать", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Напиться", effects:()=>{setMental(-2);}, next:"next_day"},
   ]},
-birthday_old: { bg:"home", text:`${state.age} лет. День рождения.`,
+
+birthday_old: { bg:"home", text:`28 ноября. Тебе ${state.age}.`,
   when:()=>state.age>=65,
   choices:[
     {text:"Принять гостей", effects:()=>{if(rel("child")>=3||rel("lena")>=5)setMental(+2);else setMental(-1);}, next:"next_day"},
     {text:"Побыть одному", effects:()=>{setMental(-1);}, next:"next_day"},
   ]},
 
-/* ========== СУЩНОСТЬ (5 уровней) ========== */
-thing_event_1: { bg:"home", text:`${fmtDate()}. Ночью просыпаешься от холода. Одеяло сброшено. В углу — тень. Слишком густая.`,
-  choices:[
-    {text:"Смотреть", effects:()=>{state.fear+=3;}, next:"next_day",
-     after:`Тень не двигается. Но ты чувствуешь: она смотрит в ответ. Утром на полу — мокрый след к двери подвала.`},
-    {text:"Закрыть глаза", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Позвать мать", effects:()=>{setRel("mother",+1);}, next:"thing_warn_1"},
-  ]},
-thing_warn_1: { bg:"home", text:`Мать на краю кровати. «Что ты видел?»`,
-  choices:[
-    {text:"Сказать правду", effects:()=>{setRel("mother",+1);}, next:"next_day",
-     after:`Ты рассказываешь. Она молчит. Потом: «Не говори отцу. Он не поймёт». Уходит.`},
-    {text:"Соврать", effects:()=>{setRel("mother",-1);}, next:"next_day"},
-  ]},
-thing_event_2: { bg:"home", text:`${fmtDate()}. В подвале — старая фотография. Семья. Не твоя. У всех стёрты лица.`,
-  choices:[
-    {text:"Взять себе", effects:()=>{state.fear+=2;}, next:"next_day",
-     after:`Прячешь под матрас. Ночью фото оказывается на подушке. Ты не брал его.`},
-    {text:"Показать матери", effects:()=>{}, next:"thing_warn_2",
-     after:`Мать берёт фото. Долго смотрит. Бросает в огонь. «Не трогай больше ничего в подвале».`},
-    {text:"Сжечь самому", effects:()=>{state.fear-=1;}, next:"next_day"},
-  ]},
-thing_warn_2: { bg:"home", text:`Мать у окна. «Ты давно видишь… его?» — не оборачиваясь.`,
-  choices:[
-    {text:"«Да. С шести лет»", effects:()=>{state.flags.mother_believes=true;}, next:"next_day",
-     after:`Она оборачивается. В глазах страх — не за себя. За тебя. «Я знала. Я надеялась, оно выберет меня».`},
-    {text:"«Нет»", effects:()=>{}, next:"next_day"},
-  ]},
-thing_event_3: { bg:"basement", text:`${fmtDate()}. На стене подвала свежая надпись. «ОН РАСТЁТ».`,
-  choices:[
-    {text:"Сфотографировать", effects:()=>{}, next:"next_day",
-     after:`На снимке — пустая стена. Надпись видна только глазами.`},
-    {text:"Показать отцу", effects:()=>{setRel("father",-1);}, next:"thing_warn_father",
-     after:`Отец спускается. «Какая надпись? Тут ничего нет». Уходит. Ты стоишь перед пустой стеной.`},
-    {text:"Стереть", effects:()=>{state.fear+=2;}, next:"next_day",
-     after:`Краска не стирается. Утром надпись другая: «ТЫ ТОЖЕ».`},
-  ]},
-thing_warn_father: { bg:"home", text:`Отец на кухне. «Мать говорит, ты видишь вещи».`,
-  choices:[
-    {text:"Рассказать всё", effects:()=>{if(flag("mother_believes"))state.flags.father_believes=true;}, next:"next_day",
-     after:`Ты рассказываешь. Он долго молчит. «Завтра спущусь сам». Не спускается.`},
-    {text:"Отпереться", effects:()=>{setRel("father",-2);}, next:"next_day"},
-  ]},
-thing_event_4: { bg:"home", text:`${fmtDate()}. Крик. Мать в коридоре. Перед ней — дверь подвала. Открытая.`,
-  choices:[
-    {text:"Закрыть дверь", effects:()=>{setRel("mother",+2);}, next:"next_day",
-     after:`Захлопываешь. Мать приходит в себя. «Спасибо». Больше не смеётся над «тенью».`},
-    {text:"Заглянуть", effects:()=>{state.fear+=5;setMental(-2);}, next:"thing_face",
-     after:`В темноте — глаза. Не два. Больше. Смотрят снизу вверх, как ребёнок на родителя.`},
-    {text:"Разбудить отца", effects:()=>{}, next:"next_day",
-     after:`Отец ворчит, но идёт. Закрывает дверь. Утром замок сломан.`},
-  ]},
-thing_face: { bg:"basement", text:`Не тень. Существо. Сидит на нижней ступеньке. У него твоё лицо — но взрослое.`,
-  choices:[
-    {text:"«Что тебе надо?»", effects:()=>{state.fear+=3;}, next:"thing_answer"},
-    {text:"Убежать", effects:()=>{setMental(-2);}, next:"next_day"},
-  ]},
-thing_answer: { bg:"basement", text:`«Тебя. Когда останешься один. Твои родители… они мешают».`,
-  choices:[
-    {text:"«Не тронь их»", effects:()=>{state.fear+=2;}, next:"next_day",
-     after:`«Тогда защити их. Если сможешь». Исчезает. Ты больше не запираешь дверь.`},
-    {text:"Молчать", effects:()=>{setMental(-3);}, next:"next_day"},
-  ]},
-thing_event_5: { bg:"home", text:`${fmtDate()}. Просыпаешься от тишины. Слишком тихо. Дом пустой. Мать и отец не вернулись.`,
-  choices:[
-    {text:"Искать их", effects:()=>{state.fear+=5;}, next:"thing_parents_gone",
-     after:`Ищешь везде. В подвале — открытая дверь. Внутри — два силуэта в углу. Слишком тихие.`},
-    {text:"Позвонить в полицию", effects:()=>{}, next:"thing_parents_gone",
-     after:`Полиция приезжает. Ничего не находят. Тебя забирают в детский дом.`},
-  ]},
-thing_parents_gone: { bg:"basement", text:`Два тела. Мать и отец. Держатся за руки. На стене: «ТЕПЕРЬ ТЫ СВОБОДЕН».`,
-  choices:[
-    {text:"Крикнуть", effects:()=>{state.flags.orphan=true;setMental(-5);}, next:"next_day"},
-    {text:"Взять что-то на память", effects:()=>{state.flags.orphan=true;setMental(-3);}, next:"next_day"},
-  ]},
-
-/* ========== ДЕТДОМ ========== */
-orphan_home: { bg:"orphanage", text:`${fmtDate()}. Детский дом. Восемь детей в комнате. «${state.name}, вот твоя койка».`, next:"orphan_intro"},
-orphan_intro: { bg:"orphanage", text:`Первая ночь. Старший улыбается. «Ты новенький. Плати дань».`,
-  choices:[
-    {text:"Дать сдачи", effects:()=>{if(state.stamina>5)state.stamina-=2;else die("beaten",state.age);}, next:"next_day",
-     after:`Ты бьёшь первым. Он падает. Больше тебя не трогают. Но и не дружат.`},
-    {text:"Отдать вещи", effects:()=>{setMental(-2);}, next:"next_day"},
-    {text:"Позвать воспитателя", effects:()=>{setMental(-1);}, next:"next_day"},
-  ]},
-orphan_bully: { bg:"orphanage", text:`${fmtDate()}. Старшие заперли тебя в чулане. «Посиди, пока не заплачешь».`,
-  choices:[
-    {text:"Плакать", effects:()=>{setMental(-2);}, next:"next_day"},
-    {text:"Молчать", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Сломать дверь", effects:()=>{if(state.stamina>6)state.stamina-=3;else die("beaten",state.age);}, next:"next_day"},
-  ]},
-orphan_caretaker: { bg:"orphanage", text:`${fmtDate()}. Воспитательница: «${state.name}, иди сюда. Мне нужна помощь».`,
-  choices:[
-    {text:"Пойти", effects:()=>{if(Math.random()<.5)setMental(-4);else setMental(+1);}, next:"next_day"},
-    {text:"«Я занят»", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"Крикнуть", effects:()=>{setMental(-1);}, next:"next_day"},
-  ]},
-orphan_adoption: { bg:"orphanage", text:`${fmtDate()}. Приехала пара. Взгляд останавливается на тебе. «Этот?»`,
-  choices:[
-    {text:"Улыбнуться", effects:()=>{state.flags.orphan=false;setMental(+2);}, next:"next_day",
-     after:`Ты улыбаешься. Через неделю уезжаешь. В новую жизнь.`},
-    {text:"Отвернуться", effects:()=>{setMental(-1);}, next:"next_day"},
-    {text:"«А вы не умрёте?»", effects:()=>{setMental(-2);if(Math.random()<.5)state.flags.orphan=false;}, next:"next_day"},
-  ]},
-orphan_escape: { bg:"street", text:`${fmtDate()}. Ты решил сбежать. Окно на втором этаже.`,
-  choices:[
-    {text:"Прыгнуть", effects:()=>{if(Math.random()<.7){state.flags.orphan=false;state.flags.orphan_free=true;}else die("fall",state.age);}, next:"next_day"},
-    {text:"Остаться", effects:()=>{setMental(-1);}, next:"next_day"},
-  ]},
-
 /* ========== ДЕМЕНЦИЯ ========== */
-dementia_crisis: { bg:"home", text:`${fmtDate()}. Ты не помнишь, как сюда попал. Комната знакомая, но чужая. На столе — фото. Кто эти люди?`,
+dementia_crisis: { bg:"home", text:`${fmtDate()}. Ты не помнишь, как сюда попал.\n\nКомната знакомая, но чужая. На столе — фото. Кто эти люди?`,
   choices:[
     {text:"Позвонить ребёнку", effects:()=>{if(rel("child")>=3)setMental(+1);else setMental(-2);}, next:"next_day"},
     {text:"Выйти на улицу", effects:()=>{if(Math.random()<.3)die("lost",state.age);setMental(-2);}, next:"next_day"},
     {text:"Сесть и ждать", effects:()=>{setMental(-1);}, next:"next_day"},
   ]},
-dementia_aggression: { bg:"home", text:`${fmtDate()}. Кто-то трогает твои вещи. Ты не помнишь, кто. Но он — враг.`,
-  choices:[
-    {text:"Ударить", effects:()=>{state.karma-=5;if(Math.random()<.3)state.flags.killed_someone=true;}, next:"next_day"},
-    {text:"Крикнуть", effects:()=>{setMental(-2);}, next:"next_day"},
-    {text:"Спрятаться", effects:()=>{setMental(-1);}, next:"next_day"},
-  ]},
 
 /* ========== ПСИХУШКА ========== */
-psych_ward: { bg:"psych", text:`${fmtDate()}. Тебя забрали. Белые стены, решётки. Врач: «Мы поможем тебе забыть».`,
+psych_ward: { bg:"psych", text:`${fmtDate()}. Тебя забрали.\n\nБелые стены, решётки. Врач: «Мы поможем тебе забыть».`,
   choices:[
-    {text:"Сотрудничать", effects:()=>{setMental(-2);}, next:"next_day",
-     after:`Тебя ведут в палату. Ты считаешь шаги. Их ровно сорок три.`},
+    {text:"Сотрудничать", effects:()=>{setMental(-2);}, next:"next_day"},
     {text:"Бунтовать", effects:()=>{setMental(-3);if(Math.random()<.5)die("psych_kill",state.age,"персонал");}, next:"next_day"},
     {text:"Притвориться здоровым", effects:()=>{if(state.mental>=4){setMental(+2);state.flags.psych_ward=false;}else setMental(-2);}, next:"next_day"},
-    {text:"Сбежать", effects:()=>{if(state.stamina>7&&Math.random()<.3){state.flags.psych_ward=false;setMental(+1);}else setMental(-3);}, next:"next_day"},
+    {text:"Сбежать", effects:()=>{if(state.stamina>7&&Math.random()<.3){state.flags.psych_ward=false;}else setMental(-3);}, next:"next_day"},
   ]},
+
 psych_ward_loop: { bg:"psych", text:`${fmtDate()}. День в палате. Ты считаешь трещины на потолке.`,
   choices:[
     {text:"Смириться", effects:()=>{}, next:"next_day"},
-    {text:"Кричать", effects:()=>{setMental(-1);}, next:"next_day"},
     {text:"Планировать побег", effects:()=>{if(state.stamina>5&&Math.random()<.2){state.flags.psych_ward=false;}else setMental(-1);}, next:"next_day"},
   ]},
+
 psych_kill: { bg:"psych", text:`${fmtDate()}. Тебя ведут на «лечение». Ремни. Холодный укол.`,
   choices:[
     {text:"Кричать", effects:()=>{die("psych_kill",state.age,"персонал");}},
     {text:"Молчать", effects:()=>{die("hospital_kill",state.age,"персонал");}},
-    {text:"«Я здоров»", effects:()=>{die("suicide_watch",state.age,"персонал");}},
   ]},
-low_mental_glances: { bg:"street", text:`${fmtDate()}. Прохожие смотрят косо.`,
+
+/* ========== НИЗКАЯ ПСИХИКА ========== */
+low_mental_glances: { bg:"street", text:`${fmtDate()}.\n\n${glance()}Прохожие смотрят косо. Кто-то переходит на другую сторону.`,
   choices:[
     {text:"Игнорировать", effects:()=>{setMental(-1);}, next:"next_day"},
     {text:"Улыбнуться", effects:()=>{setMental(+1);}, next:"next_day"},
     {text:"Крикнуть", effects:()=>{setMental(-2);state.karma-=3;}, next:"next_day"},
-  ]},
-low_mental_school: { bg:"school", text:`Учительница: «${state.name}, тебе нужно к врачу».`,
-  when:()=>lowMentalActive(),
-  choices:[
-    {text:"Согласиться", effects:()=>{state.flags.psych_ward=true;}, next:"next_day"},
-    {text:"Отказаться", effects:()=>{setMental(-2);}, next:"next_day"},
-    {text:"Соврать", effects:()=>{setMental(+1);}, next:"next_day"},
-  ]},
-low_mental_family: { bg:"home", text:`Мать не смотрит в глаза. «Ты ${g("стал","стала")} другим».`,
-  when:()=>lowMentalActive(),
-  choices:[
-    {text:"Обнять", effects:()=>{setRel("mother",+2);setMental(+1);}, next:"next_day"},
-    {text:"Уйти", effects:()=>{setRel("mother",-3);}, next:"next_day"},
-    {text:"Наорать", effects:()=>{setRel("mother",-5);setMental(-2);}, next:"next_day"},
   ]},
 
 /* ========== СОБЫТИЯ ========== */
@@ -885,9 +811,10 @@ event_anya_revenge: { bg:"corridor_night", text:`${fmtDate()}. Она в кон�
   when:()=>rel("anya")<-3&&flag("grudge"),
   choices:[
     {text:"Подойти", effects:()=>{playSfx("glitch");shake();die("anya_stab",state.age,"anya");}},
-    {text:"Бежать", effects:()=>{if(state.stamina>5)schedule(12,"anya_revenge");else{playSfx("glitch");shake();die("anya_stab",state.age,"anya");}}, next:"next_day"},
+    {text:"Бежать", effects:()=>{if(state.stamina>5)schedule(30,"anya_revenge");else{playSfx("glitch");shake();die("anya_stab",state.age,"anya");}}, next:"next_day"},
     {text:"Крикнуть", effects:()=>{playSfx("glitch");shake();die("anya_stab",state.age,"anya");}},
   ]},
+
 day_start: { bg:"home", text:`Новый день.`, choices:[{text:"Продолжить", next:"next_day"}]},
 
 };
@@ -895,21 +822,25 @@ day_start: { bg:"home", text:`Новый день.`, choices:[{text:"Продо�
 
 /* ============ ПЛАНИРОВЩИК ============ */
 const DAY_POOL = {
-  6:  ["home_age6","neutral_dinner","neutral_weather","absurd_chalk_age10","steal_age10"],
+  6:  ["home_age6","neutral_dinner","first_day_after","bab_valya"],
   12: ["school_age12","school_bully_age12","lena_neutral_food","lena_neutral_dream",
-       "school_corridor_age13","beat_classmate_age13","neutral_weather","neutral_period",
-       "neutral_voice","absurd_aliens_age11","school_use_lena","low_mental_glances"],
-  16: ["club_age16","forest_age17","school_use_lena","lena_needs_help_age14",
-       "lena_protect_serious_age15","push_from_roof_age16","absurd_president_age17","neutral_weather"],
-  19: ["uni_age19","love_age20","alcohol_age19","drugs_age20","accident_age22","job_age22"],
-  23: ["career_age25","marriage_age28","child_birth_age30","affair_age32","midlife_age40"],
-  35: ["family_age35","parents_die_age45","health_age50","friend_die_age55","divorce_age52"],
-  50: ["health_age50","dementia_aggression","friend_die_age55","divorce_age52","midlife_age40"],
-  65: ["old_age65","old_70","old_75","old_80","old_85","old_90","dementia_crisis"],
+       "school_corridor_age13","dima_bully","bab_valya","low_mental_glances"],
+  16: ["club_age16","forest_age17","lena_needs_help_age14","push_from_roof_age16"],
+  19: ["uni_age19","love_age20","alcohol_age19","accident_age22","job_age22"],
+  23: ["career_age25","marriage_age28","child_birth_age30","midlife_age40"],
+  35: ["family_age35","parents_die_age45","health_age50","divorce_age52"],
+  50: ["health_age50","dementia_aggression","friend_die_age55","divorce_age52"],
+  65: ["old_age65","old_75","old_80","dementia_crisis"],
 };
+const NEW_POOL = {
+  12: ["school_age12","school_bully_age12","lena_neutral_food","lena_neutral_dream",
+       "school_corridor_age13","dima_bully","bab_valya","low_mental_glances"],
+};
+const POOL_6 = ["home_age6","neutral_dinner","bab_valya"];
+
 function getPool(){
   const a = state.age;
-  if(a<12) return DAY_POOL[6];
+  if(a<12) return POOL_6;
   if(a<16) return DAY_POOL[12];
   if(a<19) return DAY_POOL[16];
   if(a<23) return DAY_POOL[19];
@@ -949,35 +880,25 @@ function buildEpilogue(){
   if(r("child")>=3) parts.push("Твой ребёнок держал тебя за руку.");
 
   if(state.mental<=2) parts.push("Психика была разрушена задолго до конца.");
-  else if(state.mental>=8) parts.push("До последнего дня ты сохранял ясность.");
-
   if(flag("kind")) parts.push("Кто-то вспомнил, что ты был добр.");
-  if(flag("basement_seen")) parts.push("Ты так и не рассказал никому про подвал.");
-  if(flag("told_truth")) parts.push("Твой ребёнок узнал правду. И не испугался.");
-  if(flag("told_lie")) parts.push("Ты соврал ребёнку так же, как когда-то тебе.");
-  if(flag("accepted")) parts.push("Ты улыбнулся. Оно улыбнулось в ответ.");
-  if(flag("beat_child")) parts.push("Ты стал тем, кого боялся в детстве.");
-  if(flag("pyro")) parts.push("Огонь шёл за тобой всю жизнь.");
+  if(flag("mother_believes")) parts.push("Мать верила тебе. До конца.");
+  if(flag("moved")) parts.push("Вы переехали. И оно не пошло за вами.");
   if(flag("psych_ward")) parts.push("Тебя держали в психушке. Ты умер там.");
   if(flag("killed_someone")) parts.push("Ты убил человека. Это осталось с тобой.");
-  if(flag("lena_dead")) parts.push("Лена умерла, защищая тебя. Ты не смог её спасти.");
-  if(flag("lena_left")) parts.push("Лена отвернулась от тебя. Ты остался один.");
-  if(flag("orphan")) parts.push("Ты вырос в детском доме. Никто не пришёл за тобой.");
-  if(flag("mother_believes")) parts.push("Мать верила тебе. До конца.");
-  if(flag("thingLevel")&&state.thingLevel>=4) parts.push("Оно забрало тебя. Как обещало.");
+  if(flag("lena_dead")) parts.push("Лена умерла, защищая тебя.");
+  if(flag("lena_left")) parts.push("Лена отвернулась от тебя.");
 
   if(state.guilt>5) parts.push("Последнее, что ты чувствовал — вина.");
   if(state.fear>10) parts.push("Последнее, что ты чувствовал — страх.");
 
   const key=[
     state.deathCause,state.deathAge,state.killer||"-",
-    flag("kind")?"k":"-",flag("orphan")?"o":"-",
+    flag("kind")?"k":"-",flag("moved")?"m":"-",
     flag("lena_dead")?"ld":"-",flag("lena_left")?"ll":"-",
     flag("psych_ward")?"pw":"-",flag("killed_someone")?"ks":"-",
-    state.mental<=2?"m2":"-",state.mental>=8?"m8":"-",
+    state.mental<=2?"m2":"-",
   ].join("_");
   state.seenEndings.add(key);
-
   return parts.join(" ");
 }
 
@@ -998,9 +919,12 @@ function showDeath(){
 }
 
 function playScene(id){
-  if(id==="next_day"||id==="auto_day") return advanceMonth();
-  const scene = scenes[id];
+  if(id==="next_day"||id==="auto_day") return advanceDay();
+  let scene = scenes[id];
   if(!scene) return console.error("Нет сцены:",id);
+
+  // динамическая сцена (функция)
+  if(typeof scene === "function") scene = scene();
 
   const due = checkTimers();
   if(due.length && !id.startsWith("event_")) return playScene("event_"+due[0].event);
@@ -1016,12 +940,6 @@ function playScene(id){
     return playScene("psych_ward");
   }
 
-  // детдом
-  if(flag("orphan") && !flag("orphan_done") && !id.startsWith("orphan_") && !id.startsWith("thing_")){
-    state.flags.orphan_done = true;
-    return playScene("orphan_home");
-  }
-
   render(scene);
 }
 
@@ -1035,7 +953,7 @@ function render(scene){
           <div class="status">
             <span>${state.name}</span>
             <span>${fmtDate()} · ${state.age} ${state.age<5?"года":"лет"}</span>
-            <span class="${mentClass}">Психика: ${starStr(state.mental)}</span>
+            <span class="${mentClass}">${starStr(state.mental)}</span>
           </div>
           <p class="text">${scene.text}</p>
           <div class="choices"></div>
@@ -1047,6 +965,7 @@ function render(scene){
     const box = app.querySelector(".choices");
     if(scene.choices){
       scene.choices.forEach(c=>{
+        if(c.when && !c.when()) return;
         const b = document.createElement("button");
         b.textContent = c.text;
         b.onclick = ()=>{
@@ -1080,7 +999,7 @@ function showAfter(text, next){
           <div class="status">
             <span>${state.name}</span>
             <span>${fmtDate()} · ${state.age} ${state.age<5?"года":"лет"}</span>
-            <span class="${state.mental<=2?"low":""}">Психика: ${starStr(state.mental)}</span>
+            <span class="${state.mental<=2?"low":""}">${starStr(state.mental)}</span>
           </div>
           <p class="text after-text">${text}</p>
           <div class="choices"><button id="contBtn">Дальше</button></div>
@@ -1094,9 +1013,11 @@ function showAfter(text, next){
   },350);
 }
 
-function advanceMonth(){
-  // сдвиг месяца
-  state.m += 1;
+function advanceDay(){
+  // +1 день
+  state.d += 1;
+  const dim = new Date(state.y, state.m, 0).getDate();
+  if(state.d > dim){ state.d = 1; state.m += 1; }
   if(state.m > 12){ state.m = 1; state.y += 1; }
   state.day += 1;
 
@@ -1105,18 +1026,23 @@ function advanceMonth(){
   if(state.fear>8) setMental(-1);
   if(state.guilt>8) setMental(-1);
 
-  // день рождения (переход ноябрь→декабрь, отмечен флагом)
-  if(state.m === 12){
-    if(!state.flags.birthday_done){
-      state.flags.birthday_done = true;
-      state.age += 1;
-      if(state.age < 12) return playScene("birthday");
-      if(state.age < 19) return playScene("birthday_teen");
-      if(state.age < 65) return playScene("birthday_adult");
-      return playScene("birthday_old");
+  // день рождения 28.11
+  if(state.m === 11 && state.d === 28 && !state.flags["_bd_"+state.y]){
+    state.flags["_bd_"+state.y] = true;
+    state.age += 1;
+    if(state.age<12) return playScene("birthday_kid");
+    if(state.age<19) return playScene("birthday_teen");
+    if(state.age<65) return playScene("birthday_adult");
+    return playScene("birthday_old");
+  }
+
+  // вопросы учителя: 1-2 раза в месяц
+  if(state.age >= 7 && state.age <= 17 && !flag("moved") && !flag("exam9_done") || (state.age>=7 && state.age<=17 && flag("school_10_11"))){
+    const lastTeacher = state.flags.teacherLastDay || 0;
+    if(state.day - lastTeacher >= 14 && Math.random() < 0.15){
+      state.flags.teacherLastDay = state.day;
+      return render(buildTeacherScene());
     }
-  } else {
-    state.flags.birthday_done = false;
   }
 
   // деменция с 50
@@ -1131,14 +1057,19 @@ function advanceMonth(){
     }
   }
 
-  // сущность: раз в 2–5 месяцев, до 18 лет
-  if(state.age < 18 && state.thingLevel < 5 && !flag("orphan") && !flag("psych_ward")){
-    if(state.day >= state.thingNextMonth){
-      state.thingNextMonth = state.day + 2 + Math.floor(Math.random()*4);
+  // сущность: раз в 6-12 месяцев
+  if(state.age >= 7 && state.age < 16 && state.thingLevel < 5 && !flag("moved") && !flag("orphan") && !flag("psych_ward")){
+    if(state.day >= state.thingNextDay){
+      state.thingNextDay = state.day + 180 + Math.floor(Math.random()*180);
       state.thingLevel += 1;
       return playScene("thing_event_" + state.thingLevel);
     }
   }
+
+  // 9 класс выбор
+  if(state.age===15 && !flag("exam9_done")) return playScene("exam9_choice");
+  // 11 класс выбор
+  if(state.age===17 && flag("school_10_11") && !flag("exam11_done")) return playScene("exam11_choice");
 
   autoDay();
 }
@@ -1154,28 +1085,16 @@ function autoDay(){
     return playScene("psych_ward_loop");
   }
 
-  // детдом
-  if(flag("orphan") && !flag("orphan_done")){
-    state.flags.orphan_done = true;
-    return playScene("orphan_home");
-  }
-  if(flag("orphan") && Math.random() < .5){
-    const orphanPool = ["orphan_bully","orphan_caretaker","orphan_adoption","orphan_escape"];
-    return playScene(pickScene(orphanPool));
-  }
-
   // месть Ани
   if(flag("grudge") && rel("anya")<-3 && state.age>=16 && state.age<45 && !flag("revenge_done")){
     state.flags.revenge_done = true;
     return playScene("event_anya_revenge");
   }
 
-  // кома
-  if(state.age===23 && !flag("coma_done")){state.flags.coma_done=true;return playScene("coma_age23");}
-
-  // возвращение в школу
-  if(state.age===45 && flag("grudge") && rel("anya")<-3 && !flag("return_done")){
-    state.flags.return_done=true; return playScene("return_age45");
+  // попытка переезда при 3+ уровне сущности
+  if(state.thingLevel >= 3 && !flag("moved") && !flag("move_shown_"+state.thingLevel)){
+    state.flags["move_shown_"+state.thingLevel] = true;
+    if(Math.random() < .4) return playScene("thing_beg_move");
   }
 
   // старость
@@ -1185,7 +1104,7 @@ function autoDay(){
   }
 
   // низкая психика
-  if(lowMentalActive() && !flag("low_mental_seen") && Math.random()<.4){
+  if(lowMentalActive() && !flag("low_mental_seen") && Math.random()<.3){
     state.flags.low_mental_seen = true;
     return playScene("low_mental_glances");
   }
@@ -1234,8 +1153,8 @@ function genderScreen(){
     b.onclick = ()=>{
       state.gender = b.dataset.g;
       scenes = initScenes();
-      state.flags.birthday_done = true; // день рождения только что был (28.11.2015)
-      playScene("home_age6");
+      // начинаем с первого дня в школе
+      playScene("first_day_school");
     };
   });
 }
@@ -1243,4 +1162,4 @@ function genderScreen(){
 startScreen();
 </script>
 </body>
- </html> 
+</html>
